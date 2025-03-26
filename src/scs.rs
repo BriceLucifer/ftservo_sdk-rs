@@ -110,13 +110,9 @@ impl SCS {
     }
     /// 读1个字节
     pub fn read_byte(&self, id: u8, mem_addr: u8) -> i32 {
-        let b_dat = 0;
-        let size = self.read(id, mem_addr, &[b_dat], 1);
-        if size != 1 {
-            return -1;
-        } else {
-            return b_dat as i32;
-        }
+        let mut buf = [0u8]; // 栈上数组
+        let size = self.read(id, mem_addr, &mut buf, 1);
+        if size != 1 { -1 } else { buf[0] as i32 }
     }
     /// 读2个字节
     pub fn read_word(&self, id: u8, mem_addr: u8) -> i32 {
