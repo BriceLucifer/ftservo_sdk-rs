@@ -95,16 +95,28 @@ impl SCS {
         return self.ack(id);
     }
     /// 写2个字节
-    pub fn write_word(&self, id: u8, mem_addr: u8, n_dat: u16) -> i32 {
-        todo!()
+    pub fn write_word(&self, id: u8, mem_addr: u8, w_dat: u16) -> i32 {
+        let mut buf_item = (0, 0);
+        self.host_2_scs(&mut buf_item.0, &mut buf_item.1, w_dat);
+        let b_buf = [buf_item.0, buf_item.1];
+        self.r_flush_scs();
+        self.write_buf(id, mem_addr, &b_buf, 2, INST::INST_WRITE);
+        self.w_flush_scs();
+        return self.ack(id);
     }
     /// 读指令
-    pub fn read(&self, mem_addr: u8, n_data: &[u8], n_len: u8) -> i32 {
+    pub fn read(&self, id: u8, mem_addr: u8, n_data: &[u8], n_len: u8) -> i32 {
         todo!()
     }
     /// 读1个字节
     pub fn read_byte(&self, id: u8, mem_addr: u8) -> i32 {
-        todo!()
+        let b_dat = 0;
+        let size = self.read(id, mem_addr, &[b_dat], 1);
+        if size != 1 {
+            return -1;
+        } else {
+            return b_dat as i32;
+        }
     }
     /// 读2个字节
     pub fn read_word(&self, id: u8, mem_addr: u8) -> i32 {
@@ -169,8 +181,14 @@ impl SCS {
         todo!()
     }
 
-    // 拆分u16 -> (u8, u8)
+    // 拆分u16
+    pub fn host_2_scs(&self, data_l: &mut u8, data_h: &mut u8, data: u16) {
+        todo!()
+    }
     // 合并(u8, u8) -> u16
+    pub fn scs_2_host(&self, data_l: u8, data_h: u8) -> u16 {
+        todo!()
+    }
 
     pub fn write_scs(&self, n_dat: &[u8], n_len: u8) -> i32 {
         todo!()

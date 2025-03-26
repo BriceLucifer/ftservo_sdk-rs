@@ -82,20 +82,6 @@ pub mod registers {
     pub const SMSBL_PRESENT_CURRENT_H: u8 = 70;
 }
 
-// ====================== 辅助方法 ======================
-/// 用于处理16位寄存器的辅助方法
-pub mod utils {
-    /// 将16位值拆分为高低字节
-    pub fn split_u16(value: u16) -> (u8, u8) {
-        ((value & 0xFF) as u8, ((value >> 8) & 0xFF) as u8)
-    }
-
-    /// 将高低字节合并为16位值
-    pub fn join_u16(low: u8, high: u8) -> u16 {
-        ((high as u16) << 8) | (low as u16)
-    }
-}
-
 /// 计算mem长度
 const MEM_LENGTH: usize =
     (registers::SMSBL_PRESENT_CURRENT_H - registers::SMSBL_PRESENT_POSITION_L + 1) as usize;
