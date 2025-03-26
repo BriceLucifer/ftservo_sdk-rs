@@ -31,6 +31,10 @@ impl SCSerial {
     pub fn read_scs(&self, n_dat: &mut [u8], n_len: i32) -> i32 {
         todo!()
     }
+    /// 输入1字节
+    pub fn write_scs_1(&self, b_data: u8) -> i32 {
+        todo!()
+    }
     /// 清空接收缓冲区
     pub fn r_flush_scs(&self) {
         todo!()
