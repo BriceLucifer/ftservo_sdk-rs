@@ -121,12 +121,40 @@ impl SCS {
         if size != 2 {
             return -1;
         }
-        let w_dat = self.scs_2_host(n_dat[0], n_dat[2]);
+        let w_dat = self.scs_2_host(n_dat[0], n_dat[1]);
         return w_dat as i32;
     }
     /// ping指令
-    pub fn ping(&self, id: u8) -> i32 {
-        todo!()
+    pub fn ping(&mut self, id: u8) -> i32 {
+        self.r_flush_scs();
+        self.write_buf(id, 0, &[], 0, INST::INST_PING);
+        self.w_flush_scs();
+
+        let mut cal_sum = 0;
+        let mut b_buf = [0u8; 6];
+        let size = self.read_scs(&mut b_buf, 6);
+        if size != 6 {
+            return -1;
+        }
+        if b_buf[0] != 0xff || b_buf[1] != 0xff {
+            return -1;
+        }
+        if b_buf[2] != id || id != 0xfe {
+            return -1;
+        }
+        if b_buf[3] != 2 {
+            return -1;
+        }
+        for i in 2..size as usize - 1 {
+            cal_sum += b_buf[i];
+        }
+        cal_sum = !cal_sum;
+        if cal_sum != b_buf[size as usize - 1] {
+            return -1;
+        }
+
+        self.error = b_buf[2];
+        return self.error as i32;
     }
     /// 同步读指令包发送
     pub fn sync_read_packet_tx(&self, id: &[u8], idn: u8, mem_addr: u8, n_len: u8) -> i32 {
