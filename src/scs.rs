@@ -105,7 +105,7 @@ impl SCS {
         return self.ack(id);
     }
     /// 读指令
-    pub fn read(&self, id: u8, mem_addr: u8, n_data: &[u8], n_len: u8) -> i32 {
+    pub fn read(&self, id: u8, mem_addr: u8, n_data: &mut [u8], n_len: u8) -> i32 {
         todo!()
     }
     /// 读1个字节
@@ -116,7 +116,13 @@ impl SCS {
     }
     /// 读2个字节
     pub fn read_word(&self, id: u8, mem_addr: u8) -> i32 {
-        todo!()
+        let mut n_dat = [0u8; 2];
+        let size = self.read(id, mem_addr, &mut n_dat, 2);
+        if size != 2 {
+            return -1;
+        }
+        let w_dat = self.scs_2_host(n_dat[0], n_dat[2]);
+        return w_dat as i32;
     }
     /// ping指令
     pub fn ping(&self, id: u8) -> i32 {
