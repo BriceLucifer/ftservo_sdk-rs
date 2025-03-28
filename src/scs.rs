@@ -26,7 +26,7 @@ impl SCS {
             sync_read_rx_packet_index: 0,
             sync_read_rx_packet_len: 0,
             sync_read_rx_packet_packet: Vec::new(),
-            sync_read_rx_packet_buffer: Vec::new(),
+            sync_read_rx_buffer: Vec::new(),
             sync_read_rx_packet_buff_len: 0,
             sync_read_rx_packet_buff_max: 0,
         }
