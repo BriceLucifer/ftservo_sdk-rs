@@ -11,7 +11,7 @@ pub struct SCS {
     pub sync_read_rx_packet_index: u8,
     pub sync_read_rx_packet_len: u8,
     pub sync_read_rx_packet_packet: Vec<u8>,
-    pub sync_read_rx_packet_buffer: Vec<u8>,
+    pub sync_read_rx_buffer: Vec<u8>,
     pub sync_read_rx_packet_buff_len: u16,
     pub sync_read_rx_packet_buff_max: u16,
 }
@@ -33,7 +33,7 @@ impl SCS {
     }
     /// 普通写指令
     /// id:舵机id, memaddr:内存表地址, n_dat:写入数据, n_len:数据长度
-    pub fn gen_write(&self, id: u8, mem_addr: u8, n_dat: &[u8], n_len: u8) -> i32 {
+    pub fn gen_write(&mut self, id: u8, mem_addr: u8, n_dat: &[u8], n_len: u8) -> i32 {
         self.r_flush_scs();
         self.write_buf(id, mem_addr, n_dat, n_len, INST::INST_WRITE);
         self.w_flush_scs();
@@ -41,14 +41,14 @@ impl SCS {
     }
     /// 异步写指令
     /// id:舵机id, memaddr:内存表地址, n_dat:写入数据, n_len:数据长度
-    pub fn reg_write(&self, id: u8, mem_addr: u8, n_dat: &[u8], n_len: u8) -> i32 {
+    pub fn reg_write(&mut self, id: u8, mem_addr: u8, n_dat: &[u8], n_len: u8) -> i32 {
         self.r_flush_scs();
         self.write_buf(id, mem_addr, n_dat, n_len, INST::INST_REG_WRITE);
         self.w_flush_scs();
         return self.ack(id);
     }
     /// 异步写执行指令
-    pub fn reg_write_action(&self, id: u8) -> i32 {
+    pub fn reg_write_action(&mut self, id: u8) -> i32 {
         let mut id = id;
         if id == 0x0 {
             id = 0xfe;
@@ -88,14 +88,14 @@ impl SCS {
         self.w_flush_scs();
     }
     /// 写1个字节
-    pub fn write_byte(&self, id: u8, mem_addr: u8, b_dat: u8) -> i32 {
+    pub fn write_byte(&mut self, id: u8, mem_addr: u8, b_dat: u8) -> i32 {
         self.r_flush_scs();
         self.write_buf(id, mem_addr, &[b_dat], 1, INST::INST_WRITE);
         self.w_flush_scs();
         return self.ack(id);
     }
     /// 写2个字节
-    pub fn write_word(&self, id: u8, mem_addr: u8, w_dat: u16) -> i32 {
+    pub fn write_word(&mut self, id: u8, mem_addr: u8, w_dat: u16) -> i32 {
         let mut buf_item = (0, 0);
         self.host_2_scs(&mut buf_item.0, &mut buf_item.1, w_dat);
         let b_buf = [buf_item.0, buf_item.1];
@@ -198,12 +198,13 @@ impl SCS {
         todo!()
     }
     /// 同步读指令包开始
-    pub fn sync_read_begin(&self, idn: u8, rx_len: u8) {
-        todo!()
+    pub fn sync_read_begin(&mut self, idn: u8, rx_len: u8) {
+        self.sync_read_rx_packet_buff_max = (idn * (rx_len + 6)) as u16;
+        self.sync_read_rx_buffer = vec![0u8; self.sync_read_rx_packet_buff_max as usize];
     }
     /// 同步读指令包结束
     pub fn sync_read_end(&self) {
-        todo!()
+        // 其实这个函数貌似没啥必要。。。 因为会自动释放内存
     }
     /// 写入buffer
     pub fn write_buf(&self, id: u8, mem_addr: u8, n_dat: &[u8], n_len: u8, fun: u8) {
@@ -232,8 +233,31 @@ impl SCS {
         self.write_scs1(!check_sum);
     }
     /// 返回应答
-    pub fn ack(&self, id: u8) -> i32 {
-        todo!()
+    pub fn ack(&mut self, id: u8) -> i32 {
+        let mut b_buf = [0u8; 6];
+        self.error = 0;
+        let mut cal_sum = 0;
+        if id != 0xfe && self.level != 0 {
+            let size = self.read_scs(&mut b_buf, 6);
+            if size != 6 {
+                return 0;
+            }
+            if b_buf[0] != 0xff || b_buf[1] != 0xff || b_buf[2] != id {
+                return 0;
+            }
+            if b_buf[3] != 2 {
+                return 0;
+            }
+            for i in 2..size as usize - 1 {
+                cal_sum += b_buf[i];
+            }
+            cal_sum = !cal_sum;
+            if (cal_sum != b_buf[size as usize - 1]) {
+                return 0;
+            }
+            self.error = b_buf[4];
+        }
+        return 1;
     }
 
     // 拆分u16
