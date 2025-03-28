@@ -105,17 +105,42 @@ impl SCS {
         return self.ack(id);
     }
     /// 读指令
-    pub fn read(&self, id: u8, mem_addr: u8, n_data: &mut [u8], n_len: u8) -> i32 {
-        todo!()
+    pub fn read(&mut self, id: u8, mem_addr: u8, n_data: &mut [u8], n_len: u8) -> i32 {
+        self.r_flush_scs();
+        self.write_buf(id, mem_addr, &[n_len], n_len, INST::INST_READ);
+        self.w_flush_scs();
+
+        let mut b_buf = [0u8; 255];
+        let size = self.read_scs(&mut b_buf, n_len + 6);
+
+        if size != n_len as i32 + 6 {
+            return 0;
+        }
+
+        if b_buf[0] != 0xff || b_buf[1] != 0xff {
+            return 0;
+        }
+
+        let mut cal_sum = 0;
+        for i in 2..size as usize - 1 {
+            cal_sum += b_buf[i];
+        }
+        cal_sum = !cal_sum;
+        if cal_sum != b_buf[size as usize - 1] {
+            return 0;
+        }
+        n_data.copy_from_slice(&b_buf[5..]);
+        self.error = b_buf[4];
+        return n_len as i32;
     }
     /// 读1个字节
-    pub fn read_byte(&self, id: u8, mem_addr: u8) -> i32 {
+    pub fn read_byte(&mut self, id: u8, mem_addr: u8) -> i32 {
         let mut buf = [0u8]; // 栈上数组
         let size = self.read(id, mem_addr, &mut buf, 1);
         if size != 1 { -1 } else { buf[0] as i32 }
     }
     /// 读2个字节
-    pub fn read_word(&self, id: u8, mem_addr: u8) -> i32 {
+    pub fn read_word(&mut self, id: u8, mem_addr: u8) -> i32 {
         let mut n_dat = [0u8; 2];
         let size = self.read(id, mem_addr, &mut n_dat, 2);
         if size != 2 {
@@ -213,7 +238,13 @@ impl SCS {
 
     // 拆分u16
     pub fn host_2_scs(&self, data_l: &mut u8, data_h: &mut u8, data: u16) {
-        todo!()
+        if self.end != 0 {
+            *data_l = (data >> 8) as u8;
+            *data_h = (data & 0xff) as u8;
+        } else {
+            *data_h = (data >> 8) as u8;
+            *data_l = (data & 0xff) as u8;
+        }
     }
     // 合并(u8, u8) -> u16
     pub fn scs_2_host(&self, data_l: u8, data_h: u8) -> u16 {
