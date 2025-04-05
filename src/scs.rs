@@ -272,7 +272,17 @@ impl SCS {
     }
     // 合并(u8, u8) -> u16
     pub fn scs_2_host(&self, data_l: u8, data_h: u8) -> u16 {
-        todo!()
+        if self.end != 0 {
+            let mut data = data_l as u16;
+            data <<= 8;
+            data = data | data_h as u16;
+            return data;
+        } else {
+            let mut data = data_h as u16;
+            data <<= 8;
+            data = data | data_l as u16;
+            return data;
+        }
     }
 
     pub fn write_scs(&self, n_dat: &[u8], n_len: u8) -> i32 {
