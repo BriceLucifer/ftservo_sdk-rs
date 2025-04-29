@@ -1,6 +1,6 @@
 use serialport::SerialPortBuilder;
 
-use std::io::Error;
+use std::time::Duration;
 
 const DEFAULT_BAUDRATE: u32 = 1000000;
 const LATENCY_TIMER: u32 = 50;
@@ -59,6 +59,19 @@ impl PortHandler {
     }
 
     pub fn setup_port(&mut self, cflag_baud: u32) -> bool {
+        if self.is_open {
+            self.close_port();
+        }
+
+        self.ser = Some(
+            serialport::new(self.port_name.clone(), self.baudrate).timeout(Duration::from_secs(0)),
+        );
+
+        self.is_open = false;
+
+        // reset input buffer
+
+        self.tx_time_per_byte = (1000.0 / self.baudrate as f32) * 10.0;
         true
     }
 
