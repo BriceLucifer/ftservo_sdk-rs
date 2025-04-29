@@ -19,7 +19,8 @@ const ERRBIT_OVERHEAT: u8 = 4;
 const ERRBIT_OVERELE: u8 = 8;
 const ERRBIT_OVERLOAD: u8 = 32;
 
+#[derive(Debug)]
 pub struct ProtocolPacketHandler {
-    port_handler: PortHandler<u32>,
+    port_handler: PortHandler,
     scs_end: i32,
 }
