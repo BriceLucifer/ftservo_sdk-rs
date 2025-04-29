@@ -39,22 +39,27 @@ impl PortHandler {
     }
 
     pub fn clear_port(&mut self) {
-        if let Some(mut serport) = self.ser.clone() {
+        if let Some(serport) = self.ser.clone() {
             match serport.open() {
                 Ok(mut port) => port.flush().unwrap(),
                 Err(_) => eprintln!("cannot open"),
+            }
         }
     }
 
-    pub fn set_baudrate(&mut self, baudrate: u32) -> bool{
+    pub fn set_baudrate(&mut self, baudrate: u32) -> bool {
         let bauld = self.get_c_flag_baud(baudrate);
 
         if let Some(baud) = bauld {
             self.baudrate = baud;
-            return self.setup_port(baud)
+            return self.setup_port(baud);
         } else {
             false
         }
+    }
+
+    pub fn setup_port(&mut self, cflag_baud: u32) -> bool {
+        true
     }
 
     pub fn get_port_name(&self) -> String {
