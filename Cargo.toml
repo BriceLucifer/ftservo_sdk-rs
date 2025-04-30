@@ -8,5 +8,4 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/BriceLucifer/ftservo_sdk"
 
 [dependencies]
-nix = "0.29.0"
-tokio-serial = "5.4.5"
+serialport = "4.7.1"

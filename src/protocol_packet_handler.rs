@@ -1,4 +1,4 @@
-use crate::{port_handler::PortHandler, scservo_def};
+use crate::port_handler::PortHandler;
 
 const TXPACKET_MAX_LEN: usize = 250;
 const RXPACKET_MAX_LEN: usize = 250;
