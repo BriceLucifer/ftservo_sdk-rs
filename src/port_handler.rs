@@ -1,6 +1,9 @@
-use serialport::SerialPort;
+use serialport::{ClearBuffer, DataBits, FlowControl, Parity, SerialPort, StopBits};
 
-use std::time::{Duration, Instant};
+use std::{
+    io::ErrorKind,
+    time::{Duration, Instant},
+};
 
 const DEFAULT_BAUDRATE: u32 = 1000000;
 const LATENCY_TIMER: u32 = 50;
@@ -15,7 +18,7 @@ pub struct PortHandler {
     packet_timeout: Duration,
     tx_time_per_byte: Duration,
 
-    is_using: bool,
+    pub is_using: bool,
     // use SerialPortBuilder
     ser: Option<Box<dyn SerialPort>>,
 }
@@ -35,12 +38,17 @@ impl PortHandler {
         }
     }
 
-    pub fn open_port(&mut self) -> bool {
+    pub fn open_port(&mut self) -> Result<(), serialport::Error> {
         return self.set_baudrate(self.baudrate);
     }
 
-    pub fn close_port(&mut self) {
+    pub fn close_port(&mut self) -> Result<(), serialport::Error> {
+        if let Some(port) = &mut self.ser {
+            return port.clear(serialport::ClearBuffer::All);
+        }
         self.is_open = false;
+        self.ser = None;
+        Ok(())
     }
 
     pub fn clear_port(&mut self) -> Result<(), serialport::Error> {
@@ -122,19 +130,53 @@ impl PortHandler {
         return time_since;
     }
 
-    pub fn setup_port(&mut self, cflag_baud: u32) -> bool {
-        return true;
+    pub fn setup_port(&mut self) -> Result<(), std::io::Error> {
+        if self.is_open {
+            let result = self.close_port();
+            if result.is_err() {
+                return Err(std::io::Error::new(
+                    ErrorKind::NotConnected,
+                    "can not find and close port",
+                ));
+            }
+        }
+
+        let port = serialport::new(&self.port_name, self.baudrate)
+            .flow_control(FlowControl::None)
+            .parity(Parity::None)
+            .stop_bits(StopBits::One)
+            .timeout(Duration::new(0, 0))
+            .data_bits(DataBits::Eight)
+            .open()
+            .unwrap();
+        let result = port.clear(ClearBuffer::Input);
+
+        if result.is_err() {
+            eprintln!("Error clear input buffer");
+        }
+        self.ser = Some(port);
+
+        self.is_open = true;
+        self.tx_time_per_byte = Duration::from_secs_f64(10.0 / self.baudrate as f64);
+        Ok(())
     }
 
-    pub fn set_baudrate(&mut self, baudrate: u32) -> bool {
+    pub fn set_baudrate(&mut self, baudrate: u32) -> Result<(), serialport::Error> {
         let bauld = self.get_c_flag_baud(baudrate);
 
-        if let Some(baud) = bauld {
-            self.baudrate = baud;
-            return self.setup_port(baud);
-        } else {
-            false
+        if let Some(rate) = bauld {
+            self.baudrate = rate;
+            if self.is_open {
+                let result = self.open_port();
+                if result.is_err() {
+                    return Err(serialport::Error::new(
+                        serialport::ErrorKind::Io(ErrorKind::NotConnected),
+                        "open port Error",
+                    ));
+                }
+            }
         }
+        Ok(())
     }
 
     pub fn get_c_flag_baud(&self, baudrate: u32) -> Option<u32> {
