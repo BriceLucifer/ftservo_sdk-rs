@@ -34,6 +34,10 @@ impl PortHandler {
         }
     }
 
+    pub fn open_port(&mut self) -> bool {
+        return self.set_baudrate(self.baudrate);
+    }
+
     pub fn close_port(&mut self) {
         self.is_open = false;
     }
@@ -47,15 +51,38 @@ impl PortHandler {
         }
     }
 
-    pub fn set_baudrate(&mut self, baudrate: u32) -> bool {
-        let bauld = self.get_c_flag_baud(baudrate);
+    pub fn set_port_name(&mut self, port_name: String) {
+        self.port_name = port_name;
+    }
 
-        if let Some(baud) = bauld {
-            self.baudrate = baud;
-            return self.setup_port(baud);
-        } else {
-            false
-        }
+    pub fn get_port_name(&self) -> String {
+        self.port_name.clone()
+    }
+
+    pub fn get_baudrate(&self) -> u32 {
+        return self.baudrate;
+    }
+
+    // need to check the serial library
+    pub fn get_bytes_available(&self) -> bool {
+        return true;
+    }
+
+    // need to check the serial library
+    pub fn read_port(&self, length: u32) {}
+
+    pub fn write_port(&self, packet: SerialPortBuilder) {}
+
+    pub fn set_packet_timeout(&self, packet_length: u32) {}
+
+    pub fn set_packet_timeout_millis(&self, msec: u32) {}
+
+    pub fn is_packet_timeout(&self) -> bool {
+        return true;
+    }
+
+    pub fn get_time_since_start(&self) -> u32 {
+        return 0;
     }
 
     pub fn setup_port(&mut self, cflag_baud: u32) -> bool {
@@ -75,12 +102,15 @@ impl PortHandler {
         true
     }
 
-    pub fn get_port_name(&self) -> String {
-        self.port_name.clone()
-    }
+    pub fn set_baudrate(&mut self, baudrate: u32) -> bool {
+        let bauld = self.get_c_flag_baud(baudrate);
 
-    pub fn set_port_name(&mut self, port_name: String) {
-        self.port_name = port_name;
+        if let Some(baud) = bauld {
+            self.baudrate = baud;
+            return self.setup_port(baud);
+        } else {
+            false
+        }
     }
 
     pub fn get_c_flag_baud(&self, baudrate: u32) -> Option<u32> {
