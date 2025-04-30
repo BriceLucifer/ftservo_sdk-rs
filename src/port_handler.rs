@@ -1,6 +1,6 @@
 use serialport::{SerialPort, SerialPortBuilder};
 
-use std::time::Duration;
+use std::{f32::consts::E, time::Duration};
 
 const DEFAULT_BAUDRATE: u32 = 1000000;
 const LATENCY_TIMER: u32 = 50;
@@ -68,10 +68,21 @@ impl PortHandler {
     }
 
     // need to check the serial library
-    pub fn read_port(&self, length: u32) {}
-
-    pub fn write_port(&self, packet: SerialPortBuilder) {
-        return self.ser.unwrap().open().unwrap().write();
+    pub fn read_port(&mut self, length: usize) -> Result<usize, std::io::Error> {
+        let mut temp = String::with_capacity(length);
+        if let Some(port) = &mut self.ser {
+            return port.read_to_string(&mut temp);
+        } else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "can not open",
+            ));
+        }
+    }
+    pub fn write_port(&mut self, packet: &[u8]) {
+        if let Some(port) = &mut self.ser {
+            return port.write(packet);
+        }
     }
 
     pub fn set_packet_timeout(&self, packet_length: u32) {}
