@@ -1,4 +1,5 @@
 [package]
+categories = ["robotics", "control_motor"]
 name = "ftservo_sdk"
 version = "0.1.0"
 edition = "2024"
@@ -6,6 +7,7 @@ authors = ["BriceLucifer <2376671337@qq.com>"]
 description = "a Rust library for controlling FTServo devices"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/BriceLucifer/ftservo_sdk"
+keywords = ["ftservo_sdk", "lerobot"]
 
 [dependencies]
 serialport = "4.7.1"

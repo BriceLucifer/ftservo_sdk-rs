@@ -1,4 +1,4 @@
-use serialport::SerialPortBuilder;
+use serialport::{SerialPort, SerialPortBuilder};
 
 use std::time::Duration;
 
@@ -7,29 +7,30 @@ const LATENCY_TIMER: u32 = 50;
 
 #[derive(Debug)]
 pub struct PortHandler {
+    port_name: String,
     is_open: bool,
     baudrate: u32,
-    packet_start_time: f32,
-    packet_timeout: f32,
-    tx_time_per_byte: f32,
+    // time line
+    packet_start_time: Duration,
+    packet_timeout: Duration,
+    tx_time_per_byte: Duration,
 
     is_using: bool,
-    port_name: String,
     // use SerialPortBuilder
-    ser: Option<SerialPortBuilder>,
+    ser: Option<Box<dyn SerialPort>>,
 }
 
 impl PortHandler {
-    pub fn new(port_name: String) -> Self {
+    pub fn new(port_name: &str) -> Self {
         Self {
+            port_name: port_name.to_string(),
             is_open: false,
             baudrate: DEFAULT_BAUDRATE,
-            packet_start_time: 0.0,
-            packet_timeout: 0.0,
-            tx_time_per_byte: 0.0,
+            packet_start_time: Duration::default(),
+            packet_timeout: Duration::default(),
+            tx_time_per_byte: Duration::default(),
 
             is_using: false,
-            port_name: port_name,
             ser: None,
         }
     }
@@ -42,13 +43,11 @@ impl PortHandler {
         self.is_open = false;
     }
 
-    pub fn clear_port(&mut self) {
-        if let Some(serport) = self.ser.clone() {
-            match serport.open() {
-                Ok(mut port) => port.flush().unwrap(),
-                Err(_) => eprintln!("cannot open"),
-            }
+    pub fn clear_port(&mut self) -> Result<(), serialport::Error> {
+        if let Some(serport) = &mut self.ser {
+            serport.clear(serialport::ClearBuffer::All)?
         }
+        Ok(())
     }
 
     pub fn set_port_name(&mut self, port_name: String) {
@@ -71,7 +70,9 @@ impl PortHandler {
     // need to check the serial library
     pub fn read_port(&self, length: u32) {}
 
-    pub fn write_port(&self, packet: SerialPortBuilder) {}
+    pub fn write_port(&self, packet: SerialPortBuilder) {
+        return self.ser.unwrap().open().unwrap().write();
+    }
 
     pub fn set_packet_timeout(&self, packet_length: u32) {}
 
@@ -86,20 +87,7 @@ impl PortHandler {
     }
 
     pub fn setup_port(&mut self, cflag_baud: u32) -> bool {
-        if self.is_open {
-            self.close_port();
-        }
-
-        self.ser = Some(
-            serialport::new(self.port_name.clone(), self.baudrate).timeout(Duration::from_secs(0)),
-        );
-
-        self.is_open = false;
-
-        // reset input buffer
-
-        self.tx_time_per_byte = (1000.0 / self.baudrate as f32) * 10.0;
-        true
+        return true;
     }
 
     pub fn set_baudrate(&mut self, baudrate: u32) -> bool {
@@ -122,5 +110,11 @@ impl PortHandler {
         } else {
             None
         }
+    }
+}
+
+impl Drop for PortHandler {
+    fn drop(&mut self) {
+        let _ = self.close_port();
     }
 }
