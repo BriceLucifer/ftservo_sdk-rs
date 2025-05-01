@@ -5,6 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+// some default setting
 const DEFAULT_BAUDRATE: u32 = 1000000;
 const LATENCY_TIMER: u32 = 50;
 
