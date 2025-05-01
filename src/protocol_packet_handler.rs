@@ -104,6 +104,14 @@ impl ProtocolPacketHandler {
     pub fn get_tx_rx_result(&self, result: COMM) -> String {
         match result {
             COMM::Success => "[TxRxResult] Communication success!".to_string(),
+            COMM::PortBusy => "[TxRxResult] port is in use!".to_string(),
+            COMM::TxFail => "[TxRxResult] Failed to transmit instruction packet!".to_string(),
+            COMM::RxFail => "[TxRxResult] Failed to receive instruction packet!".to_string(),
+            COMM::TxError => "[TxRxResult] Incorrect instruction packet!".to_string(),
+            COMM::RxWaiting => "[TxRxResult] Now receiving status packet!".to_string(),
+            COMM::RxTimeout => "[TxRxResult] There is no status packet!".to_string(),
+            COMM::RxCorrupt => "[TxRxResult] Received packet is corrupted!".to_string(),
+            COMM::NotAvailable => "[TxRxResult] Feature not available!".to_string(),
             _ => "".to_string(),
         }
     }
