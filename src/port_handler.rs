@@ -8,6 +8,7 @@ use std::{
 const DEFAULT_BAUDRATE: u32 = 1000000;
 const LATENCY_TIMER: u32 = 50;
 
+// PortHandler structure
 #[derive(Debug)]
 pub struct PortHandler {
     port_name: String,
@@ -24,6 +25,7 @@ pub struct PortHandler {
 }
 
 impl PortHandler {
+    /// new a PortHandler
     pub fn new(port_name: &str) -> Self {
         Self {
             port_name: port_name.to_string(),
@@ -38,48 +40,56 @@ impl PortHandler {
         }
     }
 
+    // open a port
     pub fn open_port(&mut self) -> Result<(), serialport::Error> {
-        return self.set_baudrate(self.baudrate);
+        return self.setup_port();
     }
 
+    // close the port
     pub fn close_port(&mut self) -> Result<(), serialport::Error> {
         if let Some(port) = &mut self.ser {
-            return port.clear(serialport::ClearBuffer::All);
+            port.flush()?;
         }
-        self.is_open = false;
         self.ser = None;
+        self.is_open = false;
         Ok(())
     }
 
+    // clear the transfermition
     pub fn clear_port(&mut self) -> Result<(), serialport::Error> {
         if let Some(serport) = &mut self.ser {
-            serport.clear(serialport::ClearBuffer::All)?
+            serport.clear(ClearBuffer::All)?
         }
         Ok(())
     }
 
+    // set a new port name
     pub fn set_port_name(&mut self, port_name: String) {
         self.port_name = port_name;
     }
 
+    // get the port name
     pub fn get_port_name(&self) -> String {
         self.port_name.clone()
     }
 
+    // get the baurate
     pub fn get_baudrate(&self) -> u32 {
         return self.baudrate;
     }
 
-    // need to check the serial library
-    pub fn get_bytes_available(&self) -> bool {
-        return true;
+    // check if the port is available
+    pub fn get_bytes_available(&self) -> Result<u32, serialport::Error> {
+        match &self.ser {
+            Some(port) => port.bytes_to_read(),
+            None => Ok(0),
+        }
     }
 
-    // need to check the serial library
-    pub fn read_port(&mut self, length: usize) -> Result<usize, std::io::Error> {
-        let mut temp = String::with_capacity(length);
+    // read the port
+    pub fn read_port(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         if let Some(port) = &mut self.ser {
-            return port.read_to_string(&mut temp);
+            return port.read(buf).map_err(|e| e.into());
         } else {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -87,6 +97,8 @@ impl PortHandler {
             ));
         }
     }
+
+    // write through the port
     pub fn write_port(&mut self, packet: &[u8]) -> Result<usize, std::io::Error> {
         if let Some(port) = &mut self.ser {
             return port.write(packet);
@@ -98,22 +110,26 @@ impl PortHandler {
         }
     }
 
+    // set the timeout
     pub fn set_packet_timeout(&mut self, packet_length: u32) {
         self.packet_start_time = self.get_current_time();
         self.packet_timeout = self.tx_time_per_byte * packet_length
             + self.tx_time_per_byte * 3
-            + Duration::new(LATENCY_TIMER as u64, 0);
+            + Duration::from_millis(LATENCY_TIMER as u64);
     }
 
+    // set the timeout in millis
     pub fn set_packet_timeout_millis(&mut self, msec: u64) {
         self.packet_start_time = self.get_current_time();
         self.packet_timeout = Duration::from_millis(msec);
     }
 
+    // get the current time
     pub fn get_current_time(&self) -> Option<Instant> {
         return Some(Instant::now());
     }
 
+    // is still timeout
     pub fn is_packet_timeout(&mut self) -> bool {
         if self.get_time_since_start() > self.packet_timeout {
             self.packet_timeout = Duration::new(0, 0);
@@ -122,38 +138,45 @@ impl PortHandler {
         return false;
     }
 
+    // get the time since from the start of the port
     pub fn get_time_since_start(&mut self) -> Duration {
-        let time_since = self.get_current_time().unwrap() - self.packet_start_time.unwrap();
-        if time_since < Duration::new(0, 0) {
-            self.packet_start_time = self.get_current_time();
+        match (self.get_current_time(), self.packet_start_time) {
+            (Some(now), Some(start)) => {
+                let time_since = now - start;
+                if time_since < Duration::new(0, 0) {
+                    self.packet_start_time = Some(now);
+                    Duration::ZERO
+                } else {
+                    time_since
+                }
+            }
+            _ => {
+                // 初始化时间为当前时间
+                self.packet_start_time = self.get_current_time();
+                Duration::new(0, 0)
+            }
         }
-        return time_since;
     }
 
-    pub fn setup_port(&mut self) -> Result<(), std::io::Error> {
+    // setup the port
+    pub fn setup_port(&mut self) -> Result<(), serialport::Error> {
         if self.is_open {
-            let result = self.close_port();
-            if result.is_err() {
-                return Err(std::io::Error::new(
-                    ErrorKind::NotConnected,
-                    "can not find and close port",
-                ));
-            }
+            self.close_port().map_err(|e| {
+                self.is_open = false;
+                e
+            })?
         }
 
         let port = serialport::new(&self.port_name, self.baudrate)
             .flow_control(FlowControl::None)
             .parity(Parity::None)
             .stop_bits(StopBits::One)
-            .timeout(Duration::new(0, 0))
+            .timeout(Duration::from_millis(100))
             .data_bits(DataBits::Eight)
-            .open()
-            .unwrap();
-        let result = port.clear(ClearBuffer::Input);
+            .open()?;
 
-        if result.is_err() {
-            eprintln!("Error clear input buffer");
-        }
+        port.clear(ClearBuffer::Input)?;
+
         self.ser = Some(port);
 
         self.is_open = true;
@@ -161,24 +184,23 @@ impl PortHandler {
         Ok(())
     }
 
+    // setup the baudrate
     pub fn set_baudrate(&mut self, baudrate: u32) -> Result<(), serialport::Error> {
-        let bauld = self.get_c_flag_baud(baudrate);
+        let valid_baud = self
+            .get_c_flag_baud(baudrate)
+            .ok_or(serialport::Error::new(
+                serialport::ErrorKind::InvalidInput,
+                "Invalid baudrate",
+            ))?; // return Error if we got wrong baudrate
 
-        if let Some(rate) = bauld {
-            self.baudrate = rate;
-            if self.is_open {
-                let result = self.open_port();
-                if result.is_err() {
-                    return Err(serialport::Error::new(
-                        serialport::ErrorKind::Io(ErrorKind::NotConnected),
-                        "open port Error",
-                    ));
-                }
-            }
+        self.baudrate = valid_baud;
+        if self.is_open {
+            self.setup_port()?; // 重新配置端口
         }
         Ok(())
     }
 
+    // get the flag baud
     pub fn get_c_flag_baud(&self, baudrate: u32) -> Option<u32> {
         let baudrate_list: Vec<u32> = vec![
             4800, 9600, 14400, 19200, 38400, 57600, 115200, 128000, 250000, 500000, 1000000,
@@ -191,6 +213,7 @@ impl PortHandler {
     }
 }
 
+// destructor for PortHandler
 impl Drop for PortHandler {
     fn drop(&mut self) {
         let _ = self.close_port();
