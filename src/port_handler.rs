@@ -82,7 +82,10 @@ impl PortHandler {
     pub fn get_bytes_available(&self) -> Result<u32, serialport::Error> {
         match &self.ser {
             Some(port) => port.bytes_to_read(),
-            None => Ok(0),
+            None => Err(serialport::Error::new(
+                serialport::ErrorKind::Io(ErrorKind::NotConnected),
+                "Port not open",
+            )),
         }
     }
 
@@ -141,15 +144,7 @@ impl PortHandler {
     // get the time since from the start of the port
     pub fn get_time_since_start(&mut self) -> Duration {
         match (self.get_current_time(), self.packet_start_time) {
-            (Some(now), Some(start)) => {
-                let time_since = now - start;
-                if time_since < Duration::new(0, 0) {
-                    self.packet_start_time = Some(now);
-                    Duration::ZERO
-                } else {
-                    time_since
-                }
-            }
+            (Some(now), Some(start)) => now - start,
             _ => {
                 // 初始化时间为当前时间
                 self.packet_start_time = self.get_current_time();
@@ -161,10 +156,7 @@ impl PortHandler {
     // setup the port
     pub fn setup_port(&mut self) -> Result<(), serialport::Error> {
         if self.is_open {
-            self.close_port().map_err(|e| {
-                self.is_open = false;
-                e
-            })?
+            self.close_port()?
         }
 
         let port = serialport::new(&self.port_name, self.baudrate)
