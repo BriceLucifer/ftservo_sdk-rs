@@ -1,8 +1,5 @@
-use std::io::ErrorKind;
-
-use serialport::{Error, ErrorKind};
-
 use crate::{port_handler::PortHandler, scservo_def::COMM};
+use std::io::ErrorKind;
 
 const TXPACKET_MAX_LEN: usize = 250;
 const RXPACKET_MAX_LEN: usize = 250;
@@ -140,7 +137,7 @@ impl ProtocolPacketHandler {
             _ => "".to_string(),
         }
     }
-    pub fn get_rx_packet_erro(&self, error: ErrorCode) -> Result<(), serialport::Error> {
+    pub fn get_rx_packet_error(&self, error: ErrorCode) -> Result<(), serialport::Error> {
         match error {
             ErrorCode::VoltageError => Err(serialport::Error::new(
                 serialport::ErrorKind::InvalidInput,
@@ -167,4 +164,33 @@ impl ProtocolPacketHandler {
     }
 
     pub fn tx_packet(&self) {}
+    pub fn rx_packet(&self) {}
+    pub fn rx_tx_packet(&self) {}
+    pub fn ping(&self) {}
+    pub fn action(&self) {}
+    pub fn read_tx(&self) {}
+    pub fn read_rx(&self) {}
+    pub fn read_tx_rx(&self) {}
+    pub fn read_1byte_tx(&self) {}
+    pub fn read_1byte_rx(&self) {}
+    pub fn read_1byte_tx_rx(&self) {}
+    pub fn read_2byte_tx(&self) {}
+    pub fn read_2byte_rx(&self) {}
+    pub fn read_2byte_tx_rx(&self) {}
+    pub fn read_4byte_tx(&self) {}
+    pub fn read_4byte_rx(&self) {}
+    pub fn read_4byte_tx_rx(&self) {}
+    pub fn write_tx_only(&self) {}
+    pub fn write_tx_rx(&self) {}
+    pub fn write_1byte_tx_only(&self) {}
+    pub fn write_1byte_tx_rx(&self) {}
+    pub fn write_2byte_tx_only(&self) {}
+    pub fn write_2byte_tx_rx(&self) {}
+    pub fn write_4byte_tx_only(&self) {}
+    pub fn write_4byte_tx_rx(&self) {}
+    pub fn reg_write_tx_only(&self) {}
+    pub fn reg_write_tx_rx(&self) {}
+    pub fn sync_read_tx(&self) {}
+    pub fn sync_read_rx(&self) {}
+    pub fn sync_write_tx_only(&self) {}
 }
