@@ -20,9 +20,9 @@ pub struct GroupSyncRead {
 impl GroupSyncRead {
     pub fn new(ph: ProtocolPacketHandler, start_address: u32, data_length: u32) -> Self {
         Self {
-            ph: ph,
-            start_address: start_address,
-            data_length: data_length,
+            ph,
+            start_address,
+            data_length,
 
             last_result: false,
             is_param_changed: false,
