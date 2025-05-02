@@ -1,3 +1,7 @@
+use std::io::ErrorKind;
+
+use serialport::{Error, ErrorKind};
+
 use crate::{port_handler::PortHandler, scservo_def::COMM};
 
 const TXPACKET_MAX_LEN: usize = 250;
@@ -18,6 +22,17 @@ const ERRBIT_ANGLE: u8 = 2;
 const ERRBIT_OVERHEAT: u8 = 4;
 const ERRBIT_OVERELE: u8 = 8;
 const ERRBIT_OVERLOAD: u8 = 32;
+
+#[repr(u8)]
+#[derive(Debug, Clone)]
+pub enum ErrorCode {
+    VoltageError = 1,
+    AngleError = 2,
+    OverheatError = 4,
+    OverElementError = 8,
+    OverloadError = 32,
+    Success = 0,
+}
 
 #[derive(Debug, Clone)]
 #[repr(u8)]
@@ -46,7 +61,7 @@ impl ProtocolPacketHandler {
     pub fn new(port_handler: PortHandler, scs_end: Endian) -> Self {
         Self {
             port_handler: PortHandler::new(&port_handler.get_port_name()),
-            scs_end: scs_end,
+            scs_end,
         }
     }
 
@@ -93,9 +108,19 @@ impl ProtocolPacketHandler {
         (h >> 16) & 0xFFFF
     }
 
-    /*
-        functions..... to many
-    */
+    pub fn scs_lobyte(&self, w: i32) -> i32 {
+        match self.scs_end {
+            Endian::SmallEndian => w & 0xFF,
+            Endian::BigEndian => (w >> 8) & 0xFF,
+        }
+    }
+
+    pub fn scs_hibyte(&self, w: i32) -> i32 {
+        match self.scs_end {
+            Endian::SmallEndian => (w >> 8) & 0xFF,
+            Endian::BigEndian => w & 0xFF,
+        }
+    }
 
     pub fn get_protocol_version(&self) -> String {
         "1.0".to_string()
@@ -115,4 +140,31 @@ impl ProtocolPacketHandler {
             _ => "".to_string(),
         }
     }
+    pub fn get_rx_packet_erro(&self, error: ErrorCode) -> Result<(), serialport::Error> {
+        match error {
+            ErrorCode::VoltageError => Err(serialport::Error::new(
+                serialport::ErrorKind::InvalidInput,
+                "[ServoStatus] Input voltage error!",
+            )),
+            ErrorCode::AngleError => Err(serialport::Error::new(
+                serialport::ErrorKind::Io(ErrorKind::InvalidData),
+                "[ServoStatus] Angle error!",
+            )),
+            ErrorCode::OverheatError => Err(serialport::Error::new(
+                serialport::ErrorKind::Io(ErrorKind::InvalidData),
+                "[ServoStatus] Overheat error!",
+            )),
+            ErrorCode::OverElementError => Err(serialport::Error::new(
+                serialport::ErrorKind::Io(ErrorKind::InvalidData),
+                "[ServoStatus] Over element error!",
+            )),
+            ErrorCode::OverloadError => Err(serialport::Error::new(
+                serialport::ErrorKind::Io(ErrorKind::InvalidData),
+                "[ServoStatus] Overload error!",
+            )),
+            ErrorCode::Success => Ok(()),
+        }
+    }
+
+    pub fn tx_packet(&self) {}
 }
