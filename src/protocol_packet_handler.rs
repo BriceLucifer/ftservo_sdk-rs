@@ -14,11 +14,11 @@ const ERROR: u8 = 4;
 const PARAMETER0: u8 = 5;
 
 // Protocal Error bit
-const ERRBIT_VOLTAGE: u8 = 1;
-const ERRBIT_ANGLE: u8 = 2;
-const ERRBIT_OVERHEAT: u8 = 4;
-const ERRBIT_OVERELE: u8 = 8;
-const ERRBIT_OVERLOAD: u8 = 32;
+// const ERRBIT_VOLTAGE: u8 = 1;
+// const ERRBIT_ANGLE: u8 = 2;
+// const ERRBIT_OVERHEAT: u8 = 4;
+// const ERRBIT_OVERELE: u8 = 8;
+// const ERRBIT_OVERLOAD: u8 = 32;
 
 #[repr(u8)]
 #[derive(Debug, Clone)]
