@@ -3,7 +3,7 @@ use std::{
     io::{Error, ErrorKind},
 };
 
-use crate::{protocol_packet_handler::ProtocolPacketHandler, scservo_def::COMM};
+use crate::protocol_packet_handler::ProtocolPacketHandler;
 
 #[derive(Debug)]
 pub struct GroupSyncRead {
