@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use crate::port_handler::PortHandler;
+
 #[derive(Debug)]
 pub struct GroupSyncWrite {
-    ph: u32,
+    ph: PortHandler,
     start_address: u32,
     data_length: u32,
 
