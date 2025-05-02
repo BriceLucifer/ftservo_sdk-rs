@@ -1,6 +1,6 @@
 [package]
 categories = ["robotics", "control_motor"]
-name = "FTServoSDK"
+name = "ftservo_sdk"
 version = "0.1.0"
 edition = "2024"
 authors = ["BriceLucifer <2376671337@qq.com>"]
