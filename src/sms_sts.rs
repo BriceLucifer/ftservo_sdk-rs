@@ -1,4 +1,8 @@
-use crate::{group_sync_write::GroupSyncWrite, port_handler::PortHandler};
+use crate::{
+    group_sync_write::GroupSyncWrite,
+    port_handler::PortHandler,
+    protocol_packet_handler::{Endian, ProtocolPacketHandler},
+};
 
 // 波特率定义
 pub const SMS_STS_1M: u8 = 0;
@@ -53,12 +57,32 @@ pub const SMS_STS_PRESENT_CURRENT_L: u8 = 69;
 pub const SMS_STS_PRESENT_CURRENT_H: u8 = 70;
 
 pub struct SmsSts {
-    protocol_packet_handler: PortHandler,
     group_sync_write: GroupSyncWrite,
 }
 
+/*
+    python use inheritance with PortHandler
+    I use group_sync_write for the whole thing
+*/
+
 impl SmsSts {
-    pub fn new() {}
+    pub fn new(port_handler: PortHandler) -> Self {
+        /*
+            - group_sync_write:
+                - protocolPacketHandler:
+                    - PortHandler,
+                    - Endian
+                - start_address,
+                - data_length
+        */
+        Self {
+            group_sync_write: GroupSyncWrite::new(
+                ProtocolPacketHandler::new(port_handler, Endian::SmallEndian),
+                SMS_STS_ACC as u32,
+                7,
+            ),
+        }
+    }
     pub fn write_pos_ex(&self) {}
     pub fn read_pos(&self) {}
     pub fn read_speed(&self) {}
