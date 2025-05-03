@@ -134,7 +134,6 @@ impl ProtocolPacketHandler {
             COMM::RxTimeout => "[TxRxResult] There is no status packet!".to_string(),
             COMM::RxCorrupt => "[TxRxResult] Received packet is corrupted!".to_string(),
             COMM::NotAvailable => "[TxRxResult] Feature not available!".to_string(),
-            _ => "".to_string(),
         }
     }
     pub fn get_rx_packet_error(&self, error: ErrorCode) -> Result<(), serialport::Error> {
