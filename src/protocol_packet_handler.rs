@@ -189,7 +189,11 @@ impl ProtocolPacketHandler {
     pub fn write_4byte_tx_rx(&self) {}
     pub fn reg_write_tx_only(&self) {}
     pub fn reg_write_tx_rx(&self) {}
-    pub fn sync_read_tx(&self) {}
-    pub fn sync_read_rx(&self) {}
+    pub fn sync_read_tx(&self) -> COMM {
+        COMM::Success
+    }
+    pub fn sync_read_rx(&self) -> (COMM, Vec<u8>) {
+        return (COMM::Success, Vec::new());
+    }
     pub fn sync_write_tx_only(&self) {}
 }

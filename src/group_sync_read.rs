@@ -3,7 +3,7 @@ use std::{
     io::{Error, ErrorKind},
 };
 
-use crate::protocol_packet_handler::ProtocolPacketHandler;
+use crate::{protocol_packet_handler::ProtocolPacketHandler, scservo_def::COMM};
 
 #[derive(Debug)]
 pub struct GroupSyncRead {
@@ -62,10 +62,53 @@ impl GroupSyncRead {
     pub fn clear_param(&mut self) {
         self.data_dict.clear();
     }
-    pub fn tx_packet(&mut self) {}
-    pub fn rx_packet(&self) {}
-    pub fn tx_rx_packet(&self) {}
-    pub fn read_rx(&self) {}
+    pub fn tx_packet(&mut self) -> COMM {
+        if self.data_dict.keys().len() == 0 {
+            return COMM::NotAvailable;
+        }
+
+        if self.is_param_changed || self.param.is_empty() {
+            self.make_param();
+        }
+
+        return self.ph.sync_read_tx();
+    }
+    pub fn rx_packet(&mut self) -> COMM {
+        self.last_result = true;
+
+        if self.data_dict.keys().len() == 0 {
+            return COMM::NotAvailable;
+        }
+
+        let (mut result, rxpacket) = self.ph.sync_read_rx();
+
+        if rxpacket.len() >= self.data_length as usize + 6 {
+            for scs_id in self.data_dict.keys() {
+                let (data, comm) = self.read_rx();
+
+                // Process the received data here has data competition
+
+                result = comm;
+                match result {
+                    COMM::Success => {}
+                    _ => self.last_result = false,
+                }
+            }
+        } else {
+            self.last_result = false
+        }
+        return result;
+    }
+    pub fn tx_rx_packet(&mut self) -> COMM {
+        let result = self.rx_packet();
+        match result {
+            COMM::Success => return self.tx_rx_packet(),
+            _ => return result,
+        }
+    }
+    pub fn read_rx(&self) -> (Vec<u32>, COMM) {
+        return (Vec::new(), COMM::Success);
+    }
     pub fn is_available(&self, scs_id: u32, address: u32, data_length: u32) -> (bool, u32) {
         if self.data_dict.contains_key(&scs_id) {
             return (false, 0);
