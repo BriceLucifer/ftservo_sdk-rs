@@ -30,11 +30,13 @@ impl GroupSyncRead {
             data_dict: HashMap::new(),
         }
     }
+
     pub fn make_param(&mut self) {
         if self.data_dict.is_empty() {
             self.param = self.data_dict.keys().map(|x| x.clone()).collect();
         }
     }
+
     pub fn add_param(&mut self, scs_id: u32) -> Result<(), Error> {
         if self.data_dict.contains_key(&scs_id) {
             Err(Error::new(
@@ -62,6 +64,7 @@ impl GroupSyncRead {
     pub fn clear_param(&mut self) {
         self.data_dict.clear();
     }
+
     pub fn tx_packet(&mut self) -> COMM {
         if self.data_dict.keys().len() == 0 {
             return COMM::NotAvailable;
@@ -83,11 +86,11 @@ impl GroupSyncRead {
         let (mut result, rxpacket) = self.ph.sync_read_rx();
 
         if rxpacket.len() >= self.data_length as usize + 6 {
-            for scs_id in self.data_dict.keys() {
+            let data_dict_keys = self.data_dict.clone();
+            for scs_id in data_dict_keys.keys() {
+                // a ptr for u32
                 let (data, comm) = self.read_rx();
-
-                // Process the received data here has data competition
-
+                self.data_dict.insert(*scs_id, data);
                 result = comm;
                 match result {
                     COMM::Success => {}
@@ -99,6 +102,7 @@ impl GroupSyncRead {
         }
         return result;
     }
+
     pub fn tx_rx_packet(&mut self) -> COMM {
         let result = self.rx_packet();
         match result {
@@ -106,8 +110,18 @@ impl GroupSyncRead {
             _ => return result,
         }
     }
-    pub fn read_rx(&self) -> (Vec<u32>, COMM) {
-        return (Vec::new(), COMM::Success);
+
+    pub fn read_rx(&self, rxpacket: &Vec<u32>, scs_id: u32, data_length: u32) {
+        let mut data: Vec<u32> = Vec::new();
+        let rx_length = rxpacket.len();
+        let rx_index = 0;
+
+        while (rx_index + 6 + data_length) as usize <= rx_length {
+            let headpacket = vec![0x00, 0x00, 0x00];
+            while rx_index < rx_length as u32 {
+                print!("unimplemented!()")
+            }
+        }
     }
     pub fn is_available(&self, scs_id: u32, address: u32, data_length: u32) -> (bool, u32) {
         if self.data_dict.contains_key(&scs_id) {
@@ -135,11 +149,14 @@ impl GroupSyncRead {
             }
         }
     }
+
     pub fn get_data(&self, scs_id: u32, address: u32, data_length: u32) -> Option<u32> {
         let index = (address - self.start_address + 1) as usize;
+
         if data_length == 1 {
             return Some(self.data_dict[&scs_id][index]);
         }
+
         None
     }
 }
