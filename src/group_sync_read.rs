@@ -89,7 +89,7 @@ impl GroupSyncRead {
             let data_dict_keys = self.data_dict.clone();
             for scs_id in data_dict_keys.keys() {
                 // a ptr for u32
-                let (data, comm) = self.read_rx();
+                let (data, comm) = self.read_rx(&rxpacket, *scs_id, self.data_length);
                 self.data_dict.insert(*scs_id, data);
                 result = comm;
                 match result {
@@ -111,7 +111,7 @@ impl GroupSyncRead {
         }
     }
 
-    pub fn read_rx(&self, rxpacket: &Vec<u32>, scs_id: u32, data_length: u32) {
+    pub fn read_rx(&self, rxpacket: &Vec<u8>, scs_id: u32, data_length: u32) -> (Vec<u32>, COMM) {
         let mut data: Vec<u32> = Vec::new();
         let rx_length = rxpacket.len();
         let rx_index = 0;
@@ -122,6 +122,8 @@ impl GroupSyncRead {
                 print!("unimplemented!()")
             }
         }
+
+        return (data, COMM::Success);
     }
     pub fn is_available(&self, scs_id: u32, address: u32, data_length: u32) -> (bool, u32) {
         if self.data_dict.contains_key(&scs_id) {
