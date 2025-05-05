@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{
     group_sync_write::GroupSyncWrite,
     port_handler::PortHandler,
@@ -63,7 +65,7 @@ pub const SCSCL_PRESENT_CURRENT_H: u8 = 70;
 
 #[derive(Debug)]
 pub struct Scscl {
-    group_sync_write: GroupSyncWrite,
+    pub group_sync_write: GroupSyncWrite,
 }
 
 impl Scscl {
@@ -72,4 +74,6 @@ impl Scscl {
         let group_sync_write = GroupSyncWrite::new(ph, SCSCL_GOAL_POSITION_L as u32, 6);
         Self { group_sync_write }
     }
+
+    pub fn wite_pos(&self, scs_id: u8, postion: u32, time: Duration, speed: u32) {}
 }

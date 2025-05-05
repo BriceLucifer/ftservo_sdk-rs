@@ -7,7 +7,7 @@ use crate::{protocol_packet_handler::ProtocolPacketHandler, scservo_def::COMM};
 
 #[derive(Debug)]
 pub struct GroupSyncRead {
-    ph: ProtocolPacketHandler,
+    pub ph: ProtocolPacketHandler,
     start_address: u32,
     data_length: u32,
 

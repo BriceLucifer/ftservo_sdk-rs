@@ -1,17 +1,20 @@
-use crate::{port_handler::PortHandler, scservo_def::COMM};
+use crate::{
+    port_handler::PortHandler,
+    scservo_def::{BROADCAST_ID, COMM, INST},
+};
 use std::io::ErrorKind;
 
 const TXPACKET_MAX_LEN: usize = 250;
 const RXPACKET_MAX_LEN: usize = 250;
 
 // for Protocol Packet
-const HEADER0: u8 = 0;
-const HEADER1: u8 = 1;
-const ID: u8 = 2;
-const LENGTH: u8 = 3;
-const INSTRUCTION: u8 = 4;
-const ERROR: u8 = 4;
-const PARAMETER0: u8 = 5;
+const HEADER0: usize = 0;
+const HEADER1: usize = 1;
+const ID: usize = 2;
+const LENGTH: usize = 3;
+const INSTRUCTION: usize = 4;
+const ERROR: usize = 4;
+const PARAMETER0: usize = 5;
 
 // Protocal Error bit
 // const ERRBIT_VOLTAGE: u8 = 1;
@@ -164,7 +167,9 @@ impl ProtocolPacketHandler {
 
     pub fn tx_packet(&self) {}
     pub fn rx_packet(&self) {}
-    pub fn rx_tx_packet(&self) {}
+    pub fn tx_rx_packet(&self) -> (Vec<u32>, COMM) {
+        (vec![], COMM::Success)
+    }
     pub fn ping(&self) {}
     pub fn action(&self) {}
     pub fn read_tx(&self) {}
@@ -195,5 +200,25 @@ impl ProtocolPacketHandler {
     pub fn sync_read_rx(&self) -> (COMM, Vec<u32>) {
         return (COMM::Success, Vec::new());
     }
-    pub fn sync_write_tx_only(&self) {}
+    pub fn sync_write_tx_only(
+        &self,
+        start_addree: u32,
+        data_length: u32,
+        param: Vec<u32>,
+        param_length: u32,
+    ) -> COMM {
+        let mut txpacket = Vec::with_capacity(param_length as usize + 8);
+
+        txpacket[ID] = BROADCAST_ID as u32;
+        txpacket[LENGTH] = param_length + 8;
+        txpacket[INSTRUCTION] = INST::SyncRead as u32;
+        txpacket[PARAMETER0 + 0] = start_addree;
+        txpacket[PARAMETER0 + 1] = data_length;
+
+        txpacket[(PARAMETER0 + 2)..(PARAMETER0 + 2 + param_length as usize)]
+            .copy_from_slice(&param[0..param_length as usize]);
+
+        let (_, result) = self.tx_rx_packet();
+        return result;
+    }
 }

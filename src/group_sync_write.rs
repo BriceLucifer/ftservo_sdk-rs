@@ -7,8 +7,8 @@ use crate::{protocol_packet_handler::ProtocolPacketHandler, scservo_def::COMM};
 
 #[derive(Debug)]
 pub struct GroupSyncWrite {
-    ph: ProtocolPacketHandler,
-    start_address: u32,
+    pub ph: ProtocolPacketHandler,
+    pub start_address: u32,
     data_length: u32,
 
     is_param_changed: bool,
@@ -99,12 +99,20 @@ impl GroupSyncWrite {
         self.data_dict.clear();
     }
 
-    pub fn tx_packet(&self) -> COMM {
+    pub fn tx_packet(&mut self) -> COMM {
         if self.data_dict.keys().len() == 0 {
             return COMM::NotAvailable;
         }
 
+        if self.is_param_changed && self.param.is_empty() {
+            self.make_param();
+        }
         // need to check if the data is valid
-        return COMM::Success;
+        return self.ph.sync_write_tx_only(
+            self.start_address,
+            self.data_length,
+            self.param.clone(),
+            (self.data_dict.keys().len() * (1 + self.data_length as usize)) as u32,
+        );
     }
 }
