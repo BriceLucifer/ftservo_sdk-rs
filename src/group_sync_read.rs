@@ -111,19 +111,45 @@ impl GroupSyncRead {
         }
     }
 
-    pub fn read_rx(&self, rxpacket: &Vec<u8>, scs_id: u32, data_length: u32) -> (Vec<u32>, COMM) {
+    pub fn read_rx(&self, rxpacket: &Vec<u32>, scs_id: u32, data_length: u32) -> (Vec<u32>, COMM) {
         let mut data: Vec<u32> = Vec::new();
         let rx_length = rxpacket.len();
-        let rx_index = 0;
+        let mut rx_index = 0;
 
         while (rx_index + 6 + data_length) as usize <= rx_length {
-            let headpacket = vec![0x00, 0x00, 0x00];
+            let mut headpacket = vec![0x00, 0x00, 0x00];
             while rx_index < rx_length as u32 {
-                print!("unimplemented!()")
+                headpacket[2] = headpacket[1];
+                headpacket[1] = headpacket[0];
+                headpacket[0] = rxpacket[rx_index as usize];
+                rx_index += 1;
+                if (headpacket[2] == 0xFF) && (headpacket[1] == 0xFF) && (headpacket[0] == scs_id) {
+                    break;
+                }
             }
+            if (rx_index + 3 + data_length) as usize > rx_length {
+                break;
+            }
+            if rxpacket[rx_index as usize] != data_length + 2 {
+                rx_index += 1;
+                continue;
+            }
+            rx_index += 1;
+            let error = rxpacket[rx_index as usize];
+            let mut cal_sum = scs_id + data_length + 2 + error;
+            data.push(error);
+            data.extend_from_slice(&rxpacket[rx_index as usize..(rx_index + data_length) as usize]);
+            for _ in 0..data_length {
+                cal_sum += rxpacket[rx_index as usize];
+                rx_index += 1;
+            }
+            cal_sum = !cal_sum & 0xFF;
+            if cal_sum != rxpacket[rx_index as usize] {
+                return (Vec::new(), COMM::RxCorrupt);
+            }
+            return (data, COMM::Success);
         }
-
-        return (data, COMM::Success);
+        (Vec::new(), COMM::RxCorrupt)
     }
     pub fn is_available(&self, scs_id: u32, address: u32, data_length: u32) -> (bool, u32) {
         if self.data_dict.contains_key(&scs_id) {

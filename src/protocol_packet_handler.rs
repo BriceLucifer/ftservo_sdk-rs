@@ -192,7 +192,7 @@ impl ProtocolPacketHandler {
     pub fn sync_read_tx(&self) -> COMM {
         COMM::Success
     }
-    pub fn sync_read_rx(&self) -> (COMM, Vec<u8>) {
+    pub fn sync_read_rx(&self) -> (COMM, Vec<u32>) {
         return (COMM::Success, Vec::new());
     }
     pub fn sync_write_tx_only(&self) {}
