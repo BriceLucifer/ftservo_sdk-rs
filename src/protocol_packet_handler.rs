@@ -165,12 +165,46 @@ impl ProtocolPacketHandler {
         }
     }
 
-    pub fn tx_packet(&self) {}
+    pub fn tx_packet(&mut self, tx_packet: &mut Vec<u32>) -> COMM {
+        let mut checksum = 0;
+        let total_packet_length = tx_packet[LENGTH] + 4;
+
+        if self.port_handler.is_using {
+            return COMM::PortBusy;
+        }
+
+        self.port_handler.is_using = true;
+        if total_packet_length as usize > TXPACKET_MAX_LEN {
+            self.port_handler.is_using = false;
+            return COMM::TxError;
+        }
+
+        tx_packet[HEADER0] = 0xff;
+        tx_packet[HEADER1] = 0xff;
+
+        for idx in 2..(total_packet_length - 1) as usize {
+            checksum += tx_packet[idx];
+        }
+        tx_packet[total_packet_length as usize - 1] = !checksum & 0xff;
+
+        match self.port_handler.clear_port() {
+            Ok(_) => {}
+            Err(e) => eprintln!("Error clear the port {}", e),
+        }
+
+        // write port 参数有问题
+        let written_packet_length = self.port_handler.write_port(&[0; 12]).unwrap();
+        if total_packet_length as usize != written_packet_length {
+            return COMM::TxFail;
+        }
+
+        return COMM::Success;
+    }
     pub fn rx_packet(&self) {}
     pub fn tx_rx_packet(&self) -> (Vec<u32>, COMM) {
         (vec![], COMM::Success)
     }
-    pub fn ping(&self) {}
+    pub fn ping(&self, scs_id: u32) {}
     pub fn action(&self) {}
     pub fn read_tx(&self) {}
     pub fn read_rx(&self) {}
