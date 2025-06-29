@@ -1,10 +1,6 @@
-
-
-
-          
 # FTServo SDK for Rust
 
-一个用于控制飞特舵机(FTServo)设备的Rust库，支持SMS和STS系列舵机以及SCSCL系列舵机。
+一个用于控制飞特舵机(FTServo)设备的Rust库，支持SMS和STS系列舵机以及SCSCL系列舵机。本项目是Python SDK的完整Rust重写版本，提供更高的性能和内存安全性。
 
 ## 特性
 
@@ -13,6 +9,8 @@
 - 📡 **多协议支持**: 支持SMS/STS和SCSCL两种协议
 - 🛡️ **类型安全**: 强类型系统确保运行时安全
 - 📚 **易于使用**: 简洁的API设计，丰富的示例代码
+- 🔄 **同步读写**: 支持GroupSyncWrite和GroupSyncRead功能
+- 📊 **状态监控**: 实时读取舵机位置、速度、负载、电压、温度等状态
 
 ## 支持的设备
 
@@ -33,6 +31,8 @@
 ```toml
 [dependencies]
 ftservo_sdk = "0.1.0"
+serialport = "4.0"
+thiserror = "1.0"
 ```
 
 或者使用 cargo 命令安装：
@@ -166,6 +166,10 @@ SMS/STS系列舵机控制器。
 - `write_pos_ex(id, pos, time, speed)` - 写入位置（扩展模式）
 - `read_pos(id)` - 读取当前位置
 - `read_speed(id)` - 读取当前速度
+- `read_load(id)` - 读取负载
+- `read_voltage(id)` - 读取电压（返回u8类型）
+- `read_temperature(id)` - 读取温度（返回u8类型）
+- `read_moving(id)` - 读取运动状态
 - `write_torque_enable(id, enable)` - 控制扭矩使能
 - `sync_write_pos_ex(ids, positions, times, speeds)` - 同步位置控制
 
@@ -176,8 +180,29 @@ SCSCL系列舵机控制器。
 - `write_pos(id, pos, time, speed)` - 写入位置
 - `read_pos(id)` - 读取位置
 - `read_load(id)` - 读取负载
-- `read_voltage(id)` - 读取电压
-- `read_temperature(id)` - 读取温度
+- `read_voltage(id)` - 读取电压（返回u8类型）
+- `read_temperature(id)` - 读取温度（返回u8类型）
+- `wheel_mode(id, enable)` - 轮式模式控制
+- `write_torque_enable(id, enable)` - 扭矩使能控制
+
+#### `GroupSyncWrite`
+同步写入功能，支持批量控制多个舵机。
+
+```rust
+let mut group_sync_write = GroupSyncWrite::new(protocol_handler, start_address, data_length);
+group_sync_write.add_param(servo_id, data)?;
+group_sync_write.tx_packet();
+```
+
+#### `GroupSyncRead`
+同步读取功能，支持批量读取多个舵机状态。
+
+```rust
+let mut group_sync_read = GroupSyncRead::new(protocol_handler, start_address, data_length);
+group_sync_read.add_param(servo_id)?;
+group_sync_read.tx_packet();
+let data = group_sync_read.rx_packet(&expected_ids);
+```
 
 ### 错误处理
 
@@ -190,7 +215,6 @@ pub enum FtServoError {
     InvalidParameter(String),
     Timeout,
     ChecksumError,
-    Io(std::io::Error),
 }
 ```
 
@@ -222,17 +246,31 @@ pub enum COMM {
 cargo run --example basic_control
 ```
 
+展示基本的舵机控制功能，包括ping测试、位置控制和状态读取。
+
 ### 运行同步控制示例
 
 ```bash
 cargo run --example sync_control
 ```
 
-### 运行状态读取示例
+演示如何同时控制多个舵机，实现协调运动。
+
+### 运行SCSCL控制示例
 
 ```bash
-cargo run --example read_status
+cargo run --example scscl_control
 ```
+
+展示SCSCL协议舵机的控制方法。
+
+### 运行状态监控示例
+
+```bash
+cargo run --example status_monitor
+```
+
+实时监控舵机状态，包括位置、速度、负载、电压和温度。
 
 ## 硬件连接
 
@@ -285,6 +323,10 @@ cargo run --example read_status
    - 检查数据线连接
    - 确认舵机协议类型
 
+4. **类型错误**
+   - 注意`read_voltage`和`read_temperature`返回`u8`类型
+   - 使用`unwrap_or(0)`而不是`unwrap_or(-1)`
+
 ### 调试技巧
 
 启用详细日志输出：
@@ -324,6 +366,15 @@ cargo fmt
 cargo clippy
 ```
 
+## 最新更新
+
+### v0.1.1 (最新)
+- 🐛 修复了`status_monitor.rs`示例中的类型错误
+- 🔧 完善了`GroupSyncRead`功能实现
+- 📚 更新了README文档
+- ✨ 添加了完整的示例程序集合
+- 🛠️ 修复了`lib.rs`中缺失的模块导入
+
 ## 贡献
 
 欢迎贡献代码！请遵循以下步骤：
@@ -339,6 +390,12 @@ cargo clippy
 本项目采用 MIT 或 Apache-2.0 双重许可证。详见 [LICENSE-MIT](LICENSE-MIT) 和 [LICENSE-APACHE](LICENSE-APACHE) 文件。
 
 ## 更新日志
+
+### v0.1.1 (2024-01-XX)
+- 🐛 修复类型错误和编译问题
+- ✨ 完善GroupSyncRead功能
+- 📚 更新文档和示例
+- 🔧 代码优化和bug修复
 
 ### v0.1.0 (2024-01-XX)
 - 🎉 初始版本发布
@@ -360,4 +417,3 @@ cargo clippy
 ---
 
 **注意**: 使用本库时请确保正确连接硬件，错误的接线可能损坏设备。建议在实际应用前先进行充分测试。
-        
