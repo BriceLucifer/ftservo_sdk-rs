@@ -29,17 +29,19 @@ impl GroupSyncWrite {
     }
 
     pub fn make_param(&mut self) {
+        self.param.clear();
+        
         if self.data_dict.is_empty() {
             return;
         }
 
-        for scs_id in self.data_dict.keys() {
-            if self.data_dict[scs_id].is_empty() {
+        for (&scs_id, data) in &self.data_dict {
+            if data.is_empty() {
                 return;
             }
 
-            self.param.push(scs_id.clone());
-            self.param.append(&mut self.data_dict[scs_id].clone());
+            self.param.push(scs_id);
+            self.param.extend(data.iter());
         }
     }
 
@@ -90,29 +92,31 @@ impl GroupSyncWrite {
         }
 
         self.data_dict.insert(scs_id, data);
-
         self.is_param_changed = true;
         Ok(())
     }
 
     pub fn clear_param(&mut self) {
         self.data_dict.clear();
+        self.param.clear();
+        self.is_param_changed = true;
     }
 
     pub fn tx_packet(&mut self) -> COMM {
-        if self.data_dict.keys().len() == 0 {
+        if self.data_dict.is_empty() {
             return COMM::NotAvailable;
         }
 
-        if self.is_param_changed && self.param.is_empty() {
+        if self.is_param_changed {
             self.make_param();
+            self.is_param_changed = false;
         }
-        // need to check if the data is valid
-        return self.ph.sync_write_tx_only(
+        
+        self.ph.sync_write_tx_only(
             self.start_address,
             self.data_length,
             self.param.clone(),
-            (self.data_dict.keys().len() * (1 + self.data_length as usize)) as u32,
-        );
+            (self.data_dict.len() * (1 + self.data_length as usize)) as u32,
+        )
     }
 }

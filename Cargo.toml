@@ -1,13 +1,13 @@
 [package]
-categories = ["robotics", "control_motor"]
 name = "ftservo_sdk"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 authors = ["BriceLucifer <2376671337@qq.com>"]
-description = "a Rust library for controlling FTServo devices"
+description = "A Rust library for controlling FTServo devices"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/BriceLucifer/ftservo_sdk"
-keywords = ["ftservo_sdk", "lerobot"]
+keywords = ["ftservo", "servo", "robotics", "motor-control"]
+categories = ["robotics", "hardware-support"]
 
 [profile.release]
 opt-level = 3
@@ -16,3 +16,25 @@ codegen-units = 1
 
 [dependencies]
 serialport = "4.7.1"
+thiserror = "1.0"
+
+# 示例程序
+[[example]]
+name = "basic_control"
+path = "examples/basic_control.rs"
+
+[[example]]
+name = "sync_control"
+path = "examples/sync_control.rs"
+
+[[example]]
+name = "scscl_control"
+path = "examples/scscl_control.rs"
+
+[[example]]
+name = "status_monitor"
+path = "examples/status_monitor.rs"
+
+[[example]]
+name = "read_status"
+path = "examples/read_status.rs"

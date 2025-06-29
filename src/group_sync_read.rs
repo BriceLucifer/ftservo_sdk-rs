@@ -23,7 +23,6 @@ impl GroupSyncRead {
             ph,
             start_address,
             data_length,
-
             last_result: false,
             is_param_changed: false,
             param: Vec::new(),
@@ -32,8 +31,8 @@ impl GroupSyncRead {
     }
 
     pub fn make_param(&mut self) {
-        if self.data_dict.is_empty() {
-            self.param = self.data_dict.keys().map(|x| x.clone()).collect();
+        if !self.data_dict.is_empty() {
+            self.param = self.data_dict.keys().cloned().collect();
         }
     }
 
@@ -54,43 +53,50 @@ impl GroupSyncRead {
 
     pub fn remove_param(&mut self, scs_id: u32) -> Result<(), Error> {
         if self.data_dict.contains_key(&scs_id) {
-            let _ = self.data_dict.remove(&scs_id);
+            self.data_dict.remove(&scs_id);
+            self.param.retain(|&x| x != scs_id);
             self.is_param_changed = true;
-            return Ok(());
+            Ok(())
+        } else {
+            Err(Error::new(ErrorKind::NotFound, "param is not found"))
         }
-        Err(Error::new(ErrorKind::NotFound, "param is not found"))
     }
 
     pub fn clear_param(&mut self) {
         self.data_dict.clear();
+        self.param.clear();
     }
 
     pub fn tx_packet(&mut self) -> COMM {
-        if self.data_dict.keys().len() == 0 {
+        if self.data_dict.is_empty() {
             return COMM::NotAvailable;
         }
 
         if self.is_param_changed || self.param.is_empty() {
             self.make_param();
+            self.is_param_changed = false;
         }
 
-        return self.ph.sync_read_tx();
+        // 修复：传递正确的参数给sync_read_tx
+        self.ph.sync_read_tx(self.start_address, self.data_length, self.param.clone())
     }
+    
     pub fn rx_packet(&mut self) -> COMM {
         self.last_result = true;
 
-        if self.data_dict.keys().len() == 0 {
+        if self.data_dict.is_empty() {
             return COMM::NotAvailable;
         }
 
-        let (mut result, rxpacket) = self.ph.sync_read_rx();
+        // 修复：传递正确的参数给sync_read_rx
+        let expected_ids: Vec<u32> = self.data_dict.keys().cloned().collect();
+        let (mut result, rxpacket) = self.ph.sync_read_rx(&expected_ids, self.data_length);
 
         if rxpacket.len() >= self.data_length as usize + 6 {
-            let data_dict_keys = self.data_dict.clone();
-            for scs_id in data_dict_keys.keys() {
-                // a ptr for u32
-                let (data, comm) = self.read_rx(&rxpacket, *scs_id, self.data_length);
-                self.data_dict.insert(*scs_id, data);
+            let data_dict_keys: Vec<u32> = self.data_dict.keys().cloned().collect();
+            for scs_id in data_dict_keys {
+                let (data, comm) = self.read_rx(&rxpacket, scs_id, self.data_length);
+                self.data_dict.insert(scs_id, data);
                 result = comm;
                 match result {
                     COMM::Success => {}
@@ -100,18 +106,18 @@ impl GroupSyncRead {
         } else {
             self.last_result = false
         }
-        return result;
+        result
     }
 
     pub fn tx_rx_packet(&mut self) -> COMM {
-        let result = self.rx_packet();
-        match result {
-            COMM::Success => return self.tx_rx_packet(),
-            _ => return result,
+        let tx_result = self.tx_packet();
+        match tx_result {
+            COMM::Success => self.rx_packet(),
+            _ => tx_result,
         }
     }
 
-    pub fn read_rx(&self, rxpacket: &Vec<u32>, scs_id: u32, data_length: u32) -> (Vec<u32>, COMM) {
+    pub fn read_rx(&self, rxpacket: &[u32], scs_id: u32, data_length: u32) -> (Vec<u32>, COMM) {
         let mut data: Vec<u32> = Vec::new();
         let rx_length = rxpacket.len();
         let mut rx_index = 0;
@@ -151,8 +157,9 @@ impl GroupSyncRead {
         }
         (Vec::new(), COMM::RxCorrupt)
     }
+    
     pub fn is_available(&self, scs_id: u32, address: u32, data_length: u32) -> (bool, u32) {
-        if self.data_dict.contains_key(&scs_id) {
+        if !self.data_dict.contains_key(&scs_id) {
             return (false, 0);
         }
 
@@ -167,14 +174,12 @@ impl GroupSyncRead {
         match data {
             Some(data) => {
                 if data.len() < data_length as usize + 1 {
-                    return (false, 0);
+                    (false, 0)
                 } else {
-                    return (true, data[0]);
+                    (true, data[0])
                 }
             }
-            None => {
-                return (false, 0);
-            }
+            None => (false, 0),
         }
     }
 
@@ -182,9 +187,9 @@ impl GroupSyncRead {
         let index = (address - self.start_address + 1) as usize;
 
         if data_length == 1 {
-            return Some(self.data_dict[&scs_id][index]);
+            self.data_dict.get(&scs_id).and_then(|data| data.get(index).copied())
+        } else {
+            None
         }
-
-        None
     }
 }
