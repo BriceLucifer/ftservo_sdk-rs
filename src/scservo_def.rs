@@ -11,6 +11,8 @@ pub enum INST {
     Write = 3,
     RegWrite = 4,
     Action = 5,
+    Reset = 10,
+    Ofscal = 11,
     SyncWrite = 131, // 0x83
     SyncRead = 130,  // 0x82
 }

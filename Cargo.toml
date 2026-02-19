@@ -34,7 +34,3 @@ path = "examples/scscl_control.rs"
 [[example]]
 name = "status_monitor"
 path = "examples/status_monitor.rs"
-
-[[example]]
-name = "read_status"
-path = "examples/read_status.rs"

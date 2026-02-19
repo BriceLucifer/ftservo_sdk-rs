@@ -91,7 +91,7 @@ impl PortHandler {
     // 读取端口
     pub fn read_port(&mut self, buf: &mut [u8]) -> Result<usize, std::io::Error> {
         if let Some(port) = &mut self.ser {
-            port.read(buf).map_err(|e| e.into())
+            port.read(buf)
         } else {
             Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -196,13 +196,11 @@ impl PortHandler {
         let baudrate_list: Vec<u32> = vec![
             4800, 9600, 14400, 19200, 38400, 57600, 115200, 128000, 250000, 500000, 1000000,
         ];
-        
-        for &baud in &baudrate_list {
-            if baud == baudrate {
-                return Some(baud);
-            }
-        }
-        None
+
+        baudrate_list
+            .iter()
+            .find(|&&baud| baud == baudrate)
+            .copied()
     }
 }
 

@@ -7,13 +7,13 @@ pub mod scservo_def;
 pub mod sms_sts;
 
 // 重新导出主要接口
-pub use sms_sts::SmsSts;
-pub use scscl::Scscl;
-pub use port_handler::PortHandler;
-pub use protocol_packet_handler::{ProtocolPacketHandler, Endian};
-pub use group_sync_write::GroupSyncWrite;
 pub use group_sync_read::GroupSyncRead;
-pub use scservo_def::{COMM, INST, BROADCAST_ID, MAX_ID};
+pub use group_sync_write::GroupSyncWrite;
+pub use port_handler::PortHandler;
+pub use protocol_packet_handler::{Endian, ProtocolPacketHandler};
+pub use scscl::Scscl;
+pub use scservo_def::{ErrorCode, BROADCAST_ID, COMM, INST, MAX_ID};
+pub use sms_sts::SmsSts;
 
 // 自定义错误类型
 #[derive(Debug, thiserror::Error)]

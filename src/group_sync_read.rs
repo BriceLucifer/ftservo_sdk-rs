@@ -78,9 +78,10 @@ impl GroupSyncRead {
         }
 
         // 修复：传递正确的参数给sync_read_tx
-        self.ph.sync_read_tx(self.start_address, self.data_length, self.param.clone())
+        self.ph
+            .sync_read_tx(self.start_address, self.data_length, self.param.clone())
     }
-    
+
     pub fn rx_packet(&mut self) -> COMM {
         self.last_result = true;
 
@@ -123,7 +124,7 @@ impl GroupSyncRead {
         let mut rx_index = 0;
 
         while (rx_index + 6 + data_length) as usize <= rx_length {
-            let mut headpacket = vec![0x00, 0x00, 0x00];
+            let mut headpacket = [0x00, 0x00, 0x00];
             while rx_index < rx_length as u32 {
                 headpacket[2] = headpacket[1];
                 headpacket[1] = headpacket[0];
@@ -157,7 +158,7 @@ impl GroupSyncRead {
         }
         (Vec::new(), COMM::RxCorrupt)
     }
-    
+
     pub fn is_available(&self, scs_id: u32, address: u32, data_length: u32) -> (bool, u32) {
         if !self.data_dict.contains_key(&scs_id) {
             return (false, 0);
@@ -187,7 +188,9 @@ impl GroupSyncRead {
         let index = (address - self.start_address + 1) as usize;
 
         if data_length == 1 {
-            self.data_dict.get(&scs_id).and_then(|data| data.get(index).copied())
+            self.data_dict
+                .get(&scs_id)
+                .and_then(|data| data.get(index).copied())
         } else {
             None
         }

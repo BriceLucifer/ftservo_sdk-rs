@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use crate::{
     group_sync_write::GroupSyncWrite,
     port_handler::PortHandler,
@@ -61,52 +59,47 @@ pub const SCSCL_PRESENT_CURRENT_H: u8 = 70;
 
 #[derive(Debug)]
 pub struct Scscl {
-    ph: ProtocolPacketHandler,
-    group_sync_write: GroupSyncWrite,
+    pub ph: ProtocolPacketHandler,
+    pub group_sync_write: GroupSyncWrite,
 }
 
 impl Scscl {
     pub fn new(port_handler: PortHandler) -> Self {
         let ph = ProtocolPacketHandler::new(port_handler, Endian::BigEndian);
-        let group_sync_write = GroupSyncWrite::new(
-            ProtocolPacketHandler::new(
-                PortHandler::new(&ph.port_handler.get_port_name()),
-                Endian::BigEndian,
-            ),
-            SCSCL_ACC as u32,
-            6,
-        );
-        
+        let group_sync_write = GroupSyncWrite::new(SCSCL_GOAL_POSITION_L as u32, 6);
+
         Self {
             ph,
             group_sync_write,
         }
     }
 
-    // 写入位置、时间和速度
-    pub fn write_pos(&mut self, scs_id: u32, position: i32, time: u32, speed: u32) -> COMM {
-        let mut data = vec![0u32; 6];
-        data[0] = 0; // ACC
-        data[1] = self.ph.scs_lobyte(position) as u32;
-        data[2] = self.ph.scs_hibyte(position) as u32;
-        data[3] = self.ph.scs_lobyte(time as i32) as u32;
-        data[4] = self.ph.scs_hibyte(time as i32) as u32;
-        data[5] = self.ph.scs_lobyte(speed as i32) as u32;
-        
-        match self.group_sync_write.add_param(scs_id, data) {
-            Ok(_) => self.group_sync_write.tx_packet(),
-            Err(_) => COMM::TxError,
-        }
+    pub fn write_pos(&mut self, scs_id: u32, position: i32, time: i32, speed: i32) -> (COMM, u8) {
+        let txpacket = vec![
+            self.ph.scs_lobyte(position) as u32,
+            self.ph.scs_hibyte(position) as u32,
+            self.ph.scs_lobyte(time) as u32,
+            self.ph.scs_hibyte(time) as u32,
+            self.ph.scs_lobyte(speed) as u32,
+            self.ph.scs_hibyte(speed) as u32,
+        ];
+        self.ph.write_tx_rx(
+            scs_id,
+            SCSCL_GOAL_POSITION_L as u32,
+            txpacket.len() as u32,
+            &txpacket,
+        )
     }
 
-    // 读取当前位置
     pub fn read_pos(&mut self, scs_id: u32) -> Result<i32, COMM> {
-        let (data, result) = self.ph.read_2byte_tx_rx(scs_id, SCSCL_PRESENT_POSITION_L as u32);
+        let (data, result) = self
+            .ph
+            .read_2byte_tx_rx(scs_id, SCSCL_PRESENT_POSITION_L as u32);
         match result {
             COMM::Success => {
                 if data.len() >= 7 {
                     let pos = self.ph.scs_makeword(data[5] as i32, data[6] as i32);
-                    Ok(self.ph.scs_tohost(pos, 15))
+                    Ok(pos)
                 } else {
                     Err(COMM::RxCorrupt)
                 }
@@ -115,9 +108,10 @@ impl Scscl {
         }
     }
 
-    // 读取当前速度
     pub fn read_speed(&mut self, scs_id: u32) -> Result<i32, COMM> {
-        let (data, result) = self.ph.read_2byte_tx_rx(scs_id, SCSCL_PRESENT_SPEED_L as u32);
+        let (data, result) = self
+            .ph
+            .read_2byte_tx_rx(scs_id, SCSCL_PRESENT_SPEED_L as u32);
         match result {
             COMM::Success => {
                 if data.len() >= 7 {
@@ -131,53 +125,12 @@ impl Scscl {
         }
     }
 
-    // 读取当前负载
-    pub fn read_load(&mut self, scs_id: u32) -> Result<i32, COMM> {
-        let (data, result) = self.ph.read_2byte_tx_rx(scs_id, SCSCL_PRESENT_LOAD_L as u32);
-        match result {
-            COMM::Success => {
-                if data.len() >= 7 {
-                    let load = self.ph.scs_makeword(data[5] as i32, data[6] as i32);
-                    Ok(self.ph.scs_tohost(load, 10))
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
-            _ => Err(result),
-        }
+    pub fn read_pos_speed(&mut self, scs_id: u32) -> Result<(i32, i32), COMM> {
+        let pos = self.read_pos(scs_id)?;
+        let speed = self.read_speed(scs_id)?;
+        Ok((pos, speed))
     }
 
-    // 读取电压
-    pub fn read_voltage(&mut self, scs_id: u32) -> Result<u8, COMM> {
-        let (data, result) = self.ph.read_1byte_tx_rx(scs_id, SCSCL_PRESENT_VOLTAGE as u32);
-        match result {
-            COMM::Success => {
-                if data.len() >= 6 {
-                    Ok(data[5] as u8)
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
-            _ => Err(result),
-        }
-    }
-
-    // 读取温度
-    pub fn read_temperature(&mut self, scs_id: u32) -> Result<u8, COMM> {
-        let (data, result) = self.ph.read_1byte_tx_rx(scs_id, SCSCL_PRESENT_TEMPERATURE as u32);
-        match result {
-            COMM::Success => {
-                if data.len() >= 6 {
-                    Ok(data[5] as u8)
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
-            _ => Err(result),
-        }
-    }
-
-    // 读取是否在运动
     pub fn read_moving(&mut self, scs_id: u32) -> Result<bool, COMM> {
         let (data, result) = self.ph.read_1byte_tx_rx(scs_id, SCSCL_MOVING as u32);
         match result {
@@ -192,101 +145,120 @@ impl Scscl {
         }
     }
 
-    // 读取电流
-    pub fn read_current(&mut self, scs_id: u32) -> Result<i32, COMM> {
-        let (data, result) = self.ph.read_2byte_tx_rx(scs_id, SCSCL_PRESENT_CURRENT_L as u32);
-        match result {
-            COMM::Success => {
-                if data.len() >= 7 {
-                    let current = self.ph.scs_makeword(data[5] as i32, data[6] as i32);
-                    Ok(self.ph.scs_tohost(current, 15))
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
-            _ => Err(result),
-        }
+    pub fn sync_write_pos(
+        &mut self,
+        scs_id: u32,
+        position: i32,
+        time: i32,
+        speed: i32,
+    ) -> Result<(), std::io::Error> {
+        let txpacket = vec![
+            self.ph.scs_lobyte(position) as u32,
+            self.ph.scs_hibyte(position) as u32,
+            self.ph.scs_lobyte(time) as u32,
+            self.ph.scs_hibyte(time) as u32,
+            self.ph.scs_lobyte(speed) as u32,
+            self.ph.scs_hibyte(speed) as u32,
+        ];
+        self.group_sync_write.add_param(scs_id, txpacket)
     }
 
-    // 同步写入多个舵机位置
-    pub fn sync_write_pos(&mut self, scs_ids: Vec<u32>, positions: Vec<i32>, times: Vec<u32>, speeds: Vec<u32>) -> COMM {
-        if scs_ids.len() != positions.len() || positions.len() != times.len() || times.len() != speeds.len() {
-            return COMM::TxError;
-        }
-
-        self.group_sync_write.clear_param();
-        
-        for i in 0..scs_ids.len() {
-            let mut data = vec![0u32; 6];
-            data[0] = 0; // ACC
-            data[1] = self.ph.scs_lobyte(positions[i]) as u32;
-            data[2] = self.ph.scs_hibyte(positions[i]) as u32;
-            data[3] = self.ph.scs_lobyte(times[i] as i32) as u32;
-            data[4] = self.ph.scs_hibyte(times[i] as i32) as u32;
-            data[5] = self.ph.scs_lobyte(speeds[i] as i32) as u32;
-            
-            if let Err(_) = self.group_sync_write.add_param(scs_ids[i], data) {
-                return COMM::TxError;
-            }
-        }
-        
-        self.group_sync_write.tx_packet()
+    pub fn reg_write_pos(
+        &mut self,
+        scs_id: u32,
+        position: i32,
+        time: i32,
+        speed: i32,
+    ) -> (COMM, u8) {
+        let txpacket = vec![
+            self.ph.scs_lobyte(position) as u32,
+            self.ph.scs_hibyte(position) as u32,
+            self.ph.scs_lobyte(time) as u32,
+            self.ph.scs_hibyte(time) as u32,
+            self.ph.scs_lobyte(speed) as u32,
+            self.ph.scs_hibyte(speed) as u32,
+        ];
+        self.ph.reg_write_tx_rx(
+            scs_id,
+            SCSCL_GOAL_POSITION_L as u32,
+            txpacket.len() as u32,
+            &txpacket,
+        )
     }
 
-    // 设置舵机模式
-    pub fn wheel_mode(&mut self, scs_id: u32, mode: u8) -> COMM {
-        self.ph.write_1byte_tx_rx(scs_id, SCSCL_MODE as u32, mode)
+    pub fn reg_action(&mut self) -> COMM {
+        use crate::scservo_def::BROADCAST_ID;
+        self.ph.action(BROADCAST_ID as u32)
     }
 
-    // 设置扭矩使能
-    pub fn write_torque_enable(&mut self, scs_id: u32, enable: bool) -> COMM {
-        self.ph.write_1byte_tx_rx(scs_id, SCSCL_TORQUE_ENABLE as u32, if enable { 1 } else { 0 })
+    pub fn pwm_mode(&mut self, scs_id: u32) -> (COMM, u8) {
+        let txpacket = vec![0, 0, 0, 0];
+        self.ph.write_tx_rx(
+            scs_id,
+            SCSCL_MIN_ANGLE_LIMIT_L as u32,
+            txpacket.len() as u32,
+            &txpacket,
+        )
     }
 
-    // 设置角度限制
-    pub fn write_angle_limit(&mut self, scs_id: u32, min_angle: i32, max_angle: i32) -> COMM {
-        let result1 = self.ph.write_2byte_tx_rx(scs_id, SCSCL_MIN_ANGLE_LIMIT_L as u32, min_angle as u16);
+    pub fn write_pwm(&mut self, scs_id: u32, time: i32) -> (COMM, u8) {
+        let time = self.ph.scs_toscs(time, 10);
+        self.ph
+            .write_2byte_tx_rx(scs_id, SCSCL_GOAL_TIME_L as u32, time as u16)
+    }
+
+    pub fn write_torque_enable(&mut self, scs_id: u32, enable: bool) -> (COMM, u8) {
+        self.ph.write_1byte_tx_rx(
+            scs_id,
+            SCSCL_TORQUE_ENABLE as u32,
+            if enable { 1 } else { 0 },
+        )
+    }
+
+    pub fn write_angle_limit(&mut self, scs_id: u32, min_angle: i32, max_angle: i32) -> (COMM, u8) {
+        let (result1, error1) =
+            self.ph
+                .write_2byte_tx_rx(scs_id, SCSCL_MIN_ANGLE_LIMIT_L as u32, min_angle as u16);
         if result1 != COMM::Success {
-            return result1;
+            return (result1, error1);
         }
-        self.ph.write_2byte_tx_rx(scs_id, SCSCL_MAX_ANGLE_LIMIT_L as u32, max_angle as u16)
+        self.ph
+            .write_2byte_tx_rx(scs_id, SCSCL_MAX_ANGLE_LIMIT_L as u32, max_angle as u16)
     }
 
-    // 设置死区
-    pub fn write_dead_zone(&mut self, scs_id: u32, cw_dead: u8, ccw_dead: u8) -> COMM {
-        let result1 = self.ph.write_1byte_tx_rx(scs_id, SCSCL_CW_DEAD as u32, cw_dead);
+    pub fn write_dead_zone(&mut self, scs_id: u32, cw_dead: u8, ccw_dead: u8) -> (COMM, u8) {
+        let (result1, error1) = self
+            .ph
+            .write_1byte_tx_rx(scs_id, SCSCL_CW_DEAD as u32, cw_dead);
         if result1 != COMM::Success {
-            return result1;
+            return (result1, error1);
         }
-        self.ph.write_1byte_tx_rx(scs_id, SCSCL_CCW_DEAD as u32, ccw_dead)
+        self.ph
+            .write_1byte_tx_rx(scs_id, SCSCL_CCW_DEAD as u32, ccw_dead)
     }
 
-    // 设置偏移量
-    pub fn write_offset(&mut self, scs_id: u32, offset: i32) -> COMM {
-        self.ph.write_2byte_tx_rx(scs_id, SCSCL_OFS_L as u32, offset as u16)
+    pub fn write_offset(&mut self, scs_id: u32, offset: i32) -> (COMM, u8) {
+        self.ph
+            .write_2byte_tx_rx(scs_id, SCSCL_OFS_L as u32, offset as u16)
     }
 
-    // 锁定EPROM
-    pub fn lock_eprom(&mut self, scs_id: u32) -> COMM {
+    pub fn lock_eprom(&mut self, scs_id: u32) -> (COMM, u8) {
         self.ph.write_1byte_tx_rx(scs_id, SCSCL_LOCK as u32, 1)
     }
 
-    // 解锁EPROM
-    pub fn unlock_eprom(&mut self, scs_id: u32) -> COMM {
+    pub fn unlock_eprom(&mut self, scs_id: u32) -> (COMM, u8) {
         self.ph.write_1byte_tx_rx(scs_id, SCSCL_LOCK as u32, 0)
     }
 
-    // 设置波特率
-    pub fn write_baudrate(&mut self, scs_id: u32, baudrate: u8) -> COMM {
-        self.ph.write_1byte_tx_rx(scs_id, SCSCL_BAUD_RATE as u32, baudrate)
+    pub fn write_baudrate(&mut self, scs_id: u32, baudrate: u8) -> (COMM, u8) {
+        self.ph
+            .write_1byte_tx_rx(scs_id, SCSCL_BAUD_RATE as u32, baudrate)
     }
 
-    // 设置ID
-    pub fn write_id(&mut self, scs_id: u32, new_id: u8) -> COMM {
+    pub fn write_id(&mut self, scs_id: u32, new_id: u8) -> (COMM, u8) {
         self.ph.write_1byte_tx_rx(scs_id, SCSCL_ID as u32, new_id)
     }
 
-    // 读取模型号
     pub fn read_model(&mut self, scs_id: u32) -> Result<u16, COMM> {
         let (data, result) = self.ph.read_2byte_tx_rx(scs_id, SCSCL_MODEL_L as u32);
         match result {
@@ -302,19 +274,56 @@ impl Scscl {
         }
     }
 
-    // ping测试
     pub fn ping(&mut self, scs_id: u32) -> COMM {
         self.ph.ping(scs_id)
     }
 
-    // 寄存器写入
-    pub fn reg_write_pos(&mut self, scs_id: u32, position: i32, time: u32, speed: u32) -> COMM {
-        // 实现寄存器写入位置控制
-        self.ph.write_2byte_tx_rx(scs_id, SCSCL_GOAL_POSITION_L as u32, position as u16)
+    pub fn read_load(&mut self, scs_id: u32) -> Result<i32, COMM> {
+        let (data, result) = self
+            .ph
+            .read_2byte_tx_rx(scs_id, SCSCL_PRESENT_LOAD_L as u32);
+        match result {
+            COMM::Success => {
+                if data.len() >= 7 {
+                    let load = self.ph.scs_makeword(data[5] as i32, data[6] as i32);
+                    Ok(self.ph.scs_tohost(load, 10))
+                } else {
+                    Err(COMM::RxCorrupt)
+                }
+            }
+            _ => Err(result),
+        }
     }
 
-    // 执行寄存器写入的动作
-    pub fn reg_action(&mut self, scs_id: u32) -> COMM {
-        self.ph.action(scs_id)
+    pub fn read_voltage(&mut self, scs_id: u32) -> Result<u8, COMM> {
+        let (data, result) = self
+            .ph
+            .read_1byte_tx_rx(scs_id, SCSCL_PRESENT_VOLTAGE as u32);
+        match result {
+            COMM::Success => {
+                if data.len() >= 6 {
+                    Ok(data[5] as u8)
+                } else {
+                    Err(COMM::RxCorrupt)
+                }
+            }
+            _ => Err(result),
+        }
+    }
+
+    pub fn read_temperature(&mut self, scs_id: u32) -> Result<u8, COMM> {
+        let (data, result) = self
+            .ph
+            .read_1byte_tx_rx(scs_id, SCSCL_PRESENT_TEMPERATURE as u32);
+        match result {
+            COMM::Success => {
+                if data.len() >= 6 {
+                    Ok(data[5] as u8)
+                } else {
+                    Err(COMM::RxCorrupt)
+                }
+            }
+            _ => Err(result),
+        }
     }
 }

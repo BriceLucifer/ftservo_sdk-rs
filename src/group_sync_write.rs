@@ -7,7 +7,6 @@ use crate::{protocol_packet_handler::ProtocolPacketHandler, scservo_def::COMM};
 
 #[derive(Debug)]
 pub struct GroupSyncWrite {
-    pub ph: ProtocolPacketHandler,
     pub start_address: u32,
     data_length: u32,
 
@@ -17,9 +16,8 @@ pub struct GroupSyncWrite {
 }
 
 impl GroupSyncWrite {
-    pub fn new(ph: ProtocolPacketHandler, start_address: u32, data_length: u32) -> Self {
+    pub fn new(start_address: u32, data_length: u32) -> Self {
         Self {
-            ph,
             start_address,
             data_length,
             is_param_changed: false,
@@ -30,7 +28,7 @@ impl GroupSyncWrite {
 
     pub fn make_param(&mut self) {
         self.param.clear();
-        
+
         if self.data_dict.is_empty() {
             return;
         }
@@ -102,7 +100,7 @@ impl GroupSyncWrite {
         self.is_param_changed = true;
     }
 
-    pub fn tx_packet(&mut self) -> COMM {
+    pub fn tx_packet(&mut self, ph: &mut ProtocolPacketHandler) -> COMM {
         if self.data_dict.is_empty() {
             return COMM::NotAvailable;
         }
@@ -111,8 +109,8 @@ impl GroupSyncWrite {
             self.make_param();
             self.is_param_changed = false;
         }
-        
-        self.ph.sync_write_tx_only(
+
+        ph.sync_write_tx_only(
             self.start_address,
             self.data_length,
             self.param.clone(),

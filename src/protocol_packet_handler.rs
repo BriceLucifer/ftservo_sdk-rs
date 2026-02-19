@@ -1,6 +1,6 @@
 use crate::{
     port_handler::PortHandler,
-    scservo_def::{BROADCAST_ID, COMM, INST},
+    scservo_def::{ErrorCode, BROADCAST_ID, COMM, INST},
 };
 use std::io::ErrorKind;
 
@@ -15,17 +15,6 @@ const LENGTH: usize = 3;
 const INSTRUCTION: usize = 4;
 const ERROR: usize = 4;
 const PARAMETER0: usize = 5;
-
-#[repr(u8)]
-#[derive(Debug, Clone)]
-pub enum ErrorCode {
-    VoltageError = 1,
-    AngleError = 2,
-    OverheatError = 4,
-    OverElementError = 8,
-    OverloadError = 32,
-    Success = 0,
-}
 
 #[derive(Debug, Clone)]
 #[repr(u8)]
@@ -49,12 +38,10 @@ pub struct ProtocolPacketHandler {
     scs_end: Endian,
 }
 
-// 在现有代码基础上添加缺失的功能
-
 impl ProtocolPacketHandler {
     pub fn new(port_handler: PortHandler, scs_end: Endian) -> Self {
         Self {
-            port_handler: PortHandler::new(&port_handler.get_port_name()),
+            port_handler,
             scs_end,
         }
     }
@@ -160,14 +147,6 @@ impl ProtocolPacketHandler {
         }
     }
 
-    fn calculate_checksum(&self, packet: &[u8]) -> u8 {
-        let mut checksum = 0u8;
-        for &byte in &packet[2..] {
-            checksum = checksum.wrapping_add(byte);
-        }
-        !checksum
-    }
-
     pub fn tx_packet(&mut self, tx_packet: &mut Vec<u32>) -> COMM {
         let mut checksum = 0;
         let total_packet_length = tx_packet[LENGTH] + 4;
@@ -195,13 +174,10 @@ impl ProtocolPacketHandler {
             Err(e) => eprintln!("Error clear the port {}", e),
         }
 
-        // 修复：将u32数组转换为u8数组进行发送
         let tx_data: Vec<u8> = tx_packet[0..total_packet_length as usize]
             .iter()
             .map(|&x| x as u8)
             .collect();
-
-        self.port_handler.set_packet_timeout(total_packet_length);
 
         match self.port_handler.write_port(&tx_data) {
             Ok(written) => {
@@ -216,71 +192,166 @@ impl ProtocolPacketHandler {
             }
         }
 
-        self.port_handler.is_using = false;
         COMM::Success
     }
 
     pub fn rx_packet(&mut self) -> (Vec<u32>, COMM) {
-        let mut rx_packet = vec![0u32; RXPACKET_MAX_LEN];
+        let mut rx_packet = Vec::new();
+        let result;
+        let mut checksum;
         let mut rx_length = 0;
-        let mut wait_length = 6; // 最小包长度
+        let mut wait_length = 6;
 
         loop {
             let mut buffer = [0u8; 1];
-            match self.port_handler.read_port(&mut buffer) {
-                Ok(bytes_read) => {
-                    if bytes_read > 0 {
-                        rx_packet[rx_length] = buffer[0] as u32;
-                        rx_length += 1;
+            if let Ok(bytes_read) = self.port_handler.read_port(&mut buffer) {
+                if bytes_read > 0 {
+                    rx_packet.push(buffer[0] as u32);
+                    rx_length += 1;
+                }
+            }
 
-                        // 检查包头
-                        if rx_length >= 4 {
-                            if rx_packet[0] == 0xFF && rx_packet[1] == 0xFF {
-                                wait_length = rx_packet[3] as usize + 4; // 长度字段 + 包头和校验和
-                            }
-                        }
+            if rx_length >= wait_length {
+                let mut idx = 0;
+                while idx < rx_length - 1 {
+                    if rx_packet[idx] == 0xFF && rx_packet[idx + 1] == 0xFF {
+                        break;
+                    }
+                    idx += 1;
+                }
 
-                        // 检查是否接收完整包
-                        if rx_length >= wait_length && wait_length > 6 {
+                if idx == 0 {
+                    if rx_packet[ID] > 0xFD
+                        || rx_packet[LENGTH] > RXPACKET_MAX_LEN as u32
+                        || rx_packet[ERROR] > 0x7F
+                    {
+                        rx_packet.remove(0);
+                        rx_length -= 1;
+                        continue;
+                    }
+
+                    let new_wait_length = rx_packet[LENGTH] + LENGTH as u32 + 1;
+                    if wait_length != new_wait_length as usize {
+                        wait_length = new_wait_length as usize;
+                        continue;
+                    }
+
+                    if rx_length < wait_length {
+                        if self.port_handler.is_packet_timeout() {
+                            result = if rx_length == 0 {
+                                COMM::RxTimeout
+                            } else {
+                                COMM::RxCorrupt
+                            };
                             break;
+                        } else {
+                            continue;
                         }
+                    }
 
-                        if rx_length >= RXPACKET_MAX_LEN {
-                            return (vec![], COMM::RxCorrupt);
-                        }
+                    checksum = 0;
+                    for i in 2..wait_length - 1 {
+                        checksum += rx_packet[i];
                     }
+                    checksum = (!checksum) & 0xFF;
+
+                    if rx_packet[wait_length - 1] == checksum {
+                        result = COMM::Success;
+                    } else {
+                        result = COMM::RxCorrupt;
+                    }
+                    break;
+                } else {
+                    rx_packet.drain(0..idx);
+                    rx_length -= idx;
                 }
-                Err(_) => {
-                    if self.port_handler.is_packet_timeout() {
-                        return (vec![], COMM::RxTimeout);
-                    }
+            } else {
+                if self.port_handler.is_packet_timeout() {
+                    result = if rx_length == 0 {
+                        COMM::RxTimeout
+                    } else {
+                        COMM::RxCorrupt
+                    };
+                    break;
                 }
             }
         }
 
-        // 验证校验和
-        if rx_length >= 4 {
-            let mut checksum = 0u32;
-            for i in 2..rx_length - 1 {
-                checksum += rx_packet[i];
-            }
-            checksum = (!checksum) & 0xFF;
+        self.port_handler.is_using = false;
 
-            if checksum != rx_packet[rx_length - 1] {
-                return (vec![], COMM::RxCorrupt);
-            }
+        if result == COMM::Success {
+            (rx_packet, result)
+        } else {
+            (vec![], result)
         }
-
-        (rx_packet[0..rx_length].to_vec(), COMM::Success)
     }
 
-    pub fn tx_rx_packet(&mut self, tx_packet: &mut Vec<u32>) -> (Vec<u32>, COMM) {
+    pub fn tx_rx_packet(&mut self, tx_packet: &mut Vec<u32>) -> (Vec<u32>, COMM, u8) {
         let tx_result = self.tx_packet(tx_packet);
         if tx_result != COMM::Success {
-            return (vec![], tx_result);
+            return (vec![], tx_result, 0);
         }
 
-        self.rx_packet()
+        if tx_packet[ID] == BROADCAST_ID as u32 {
+            self.port_handler.is_using = false;
+            return (vec![], COMM::Success, 0);
+        }
+
+        if tx_packet[INSTRUCTION] == INST::Read as u32 {
+            self.port_handler
+                .set_packet_timeout(tx_packet[PARAMETER0 + 1] + 6);
+        } else {
+            self.port_handler.set_packet_timeout(6);
+        }
+
+        loop {
+            let (rx_packet, result) = self.rx_packet();
+            if result != COMM::Success || tx_packet[ID] == rx_packet[ID] {
+                let error = if result == COMM::Success && tx_packet[ID] == rx_packet[ID] {
+                    rx_packet[ERROR] as u8
+                } else {
+                    0
+                };
+                return (rx_packet, result, error);
+            }
+        }
+    }
+
+    pub fn write_tx_only(&mut self, scs_id: u32, address: u32, length: u32, data: &[u32]) -> COMM {
+        let mut tx_packet = vec![0u32; (length + 7) as usize];
+        tx_packet[ID] = scs_id;
+        tx_packet[LENGTH] = length + 3;
+        tx_packet[INSTRUCTION] = INST::Write as u32;
+        tx_packet[PARAMETER0] = address;
+
+        for i in 0..length as usize {
+            tx_packet[PARAMETER0 + 1 + i] = data[i];
+        }
+
+        let result = self.tx_packet(&mut tx_packet);
+        self.port_handler.is_using = false;
+        result
+    }
+
+    pub fn write_tx_rx(
+        &mut self,
+        scs_id: u32,
+        address: u32,
+        length: u32,
+        data: &[u32],
+    ) -> (COMM, u8) {
+        let mut tx_packet = vec![0u32; (length + 7) as usize];
+        tx_packet[ID] = scs_id;
+        tx_packet[LENGTH] = length + 3;
+        tx_packet[INSTRUCTION] = INST::Write as u32;
+        tx_packet[PARAMETER0] = address;
+
+        for i in 0..length as usize {
+            tx_packet[PARAMETER0 + 1 + i] = data[i];
+        }
+
+        let (_, result, error) = self.tx_rx_packet(&mut tx_packet);
+        (result, error)
     }
 
     pub fn ping(&mut self, scs_id: u32) -> COMM {
@@ -288,7 +359,7 @@ impl ProtocolPacketHandler {
         tx_packet[ID] = scs_id;
         tx_packet[LENGTH] = 2;
         tx_packet[INSTRUCTION] = INST::Ping as u32;
-        
+
         self.tx_packet(&mut tx_packet)
     }
 
@@ -297,7 +368,7 @@ impl ProtocolPacketHandler {
         tx_packet[ID] = scs_id;
         tx_packet[LENGTH] = 2;
         tx_packet[INSTRUCTION] = INST::Action as u32;
-        
+
         self.tx_packet(&mut tx_packet)
     }
 
@@ -307,9 +378,10 @@ impl ProtocolPacketHandler {
         tx_packet[LENGTH] = 4;
         tx_packet[INSTRUCTION] = INST::Read as u32;
         tx_packet[PARAMETER0] = address;
-        tx_packet[PARAMETER0 + 1] = 1; // 读取1字节
-        
-        self.tx_rx_packet(&mut tx_packet)
+        tx_packet[PARAMETER0 + 1] = 1;
+
+        let (data, result, _) = self.tx_rx_packet(&mut tx_packet);
+        (data, result)
     }
 
     pub fn read_2byte_tx_rx(&mut self, scs_id: u32, address: u32) -> (Vec<u32>, COMM) {
@@ -318,89 +390,83 @@ impl ProtocolPacketHandler {
         tx_packet[LENGTH] = 4;
         tx_packet[INSTRUCTION] = INST::Read as u32;
         tx_packet[PARAMETER0] = address;
-        tx_packet[PARAMETER0 + 1] = 2; // 读取2字节
-        
-        self.tx_rx_packet(&mut tx_packet)
+        tx_packet[PARAMETER0 + 1] = 2;
+
+        let (data, result, _) = self.tx_rx_packet(&mut tx_packet);
+        (data, result)
     }
 
-    pub fn write_1byte_tx_rx(&mut self, scs_id: u32, address: u32, data: u8) -> COMM {
-        let mut tx_packet = vec![0u32; 8];
-        tx_packet[ID] = scs_id;
-        tx_packet[LENGTH] = 4;
-        tx_packet[INSTRUCTION] = INST::Write as u32;
-        tx_packet[PARAMETER0] = address;
-        tx_packet[PARAMETER0 + 1] = data as u32;
-        
-        self.tx_packet(&mut tx_packet)
+    pub fn write_1byte_tx_rx(&mut self, scs_id: u32, address: u32, data: u8) -> (COMM, u8) {
+        let tx_data = vec![data as u32];
+        self.write_tx_rx(scs_id, address, 1, &tx_data)
     }
 
-    pub fn write_2byte_tx_rx(&mut self, scs_id: u32, address: u32, data: u16) -> COMM {
-        let mut tx_packet = vec![0u32; 9];
-        tx_packet[ID] = scs_id;
-        tx_packet[LENGTH] = 5;
-        tx_packet[INSTRUCTION] = INST::Write as u32;
-        tx_packet[PARAMETER0] = address;
-        tx_packet[PARAMETER0 + 1] = self.scs_lobyte(data as i32) as u32;
-        tx_packet[PARAMETER0 + 2] = self.scs_hibyte(data as i32) as u32;
-        
-        self.tx_packet(&mut tx_packet)
+    pub fn write_2byte_tx_rx(&mut self, scs_id: u32, address: u32, data: u16) -> (COMM, u8) {
+        let tx_data = vec![
+            self.scs_lobyte(data as i32) as u32,
+            self.scs_hibyte(data as i32) as u32,
+        ];
+        self.write_tx_rx(scs_id, address, 2, &tx_data)
     }
 
-    pub fn sync_write_tx_only(&mut self, start_address: u32, data_length: u32, param: Vec<u32>, param_length: u32) -> COMM {
+    pub fn sync_write_tx_only(
+        &mut self,
+        start_address: u32,
+        data_length: u32,
+        param: Vec<u32>,
+        param_length: u32,
+    ) -> COMM {
         let mut tx_packet = vec![0u32; param_length as usize + 8];
         tx_packet[ID] = BROADCAST_ID as u32;
         tx_packet[LENGTH] = param_length + 4;
         tx_packet[INSTRUCTION] = INST::SyncWrite as u32;
         tx_packet[PARAMETER0] = start_address;
         tx_packet[PARAMETER0 + 1] = data_length;
-        
+
         for (i, &value) in param.iter().enumerate() {
             tx_packet[PARAMETER0 + 2 + i] = value;
         }
-        
-        self.tx_packet(&mut tx_packet)
+
+        let (_, result, _) = self.tx_rx_packet(&mut tx_packet);
+        result
     }
 
-    // 修复 sync_read_tx 实现
     pub fn sync_read_tx(&mut self, start_address: u32, data_length: u32, param: Vec<u32>) -> COMM {
         let param_length = param.len() as u32;
         let mut tx_packet = vec![0u32; param_length as usize + 8];
-        
+
         tx_packet[ID] = BROADCAST_ID as u32;
         tx_packet[LENGTH] = param_length + 4;
         tx_packet[INSTRUCTION] = INST::SyncRead as u32;
         tx_packet[PARAMETER0] = start_address;
         tx_packet[PARAMETER0 + 1] = data_length;
-        
+
         for (i, &value) in param.iter().enumerate() {
             tx_packet[PARAMETER0 + 2 + i] = value;
         }
-        
+
         self.tx_packet(&mut tx_packet)
     }
 
-    // 修复 sync_read_rx 实现
-    pub fn sync_read_rx(&mut self, expected_ids: &[u32], data_length: u32) -> (COMM, Vec<u32>) {
+    pub fn sync_read_rx(&mut self, expected_ids: &[u32], _data_length: u32) -> (COMM, Vec<u32>) {
         let mut all_data = Vec::new();
-        
+
         for &scs_id in expected_ids {
             let (rx_data, result) = self.rx_packet();
             if result != COMM::Success {
                 return (result, vec![]);
             }
-            
-            // 验证ID匹配
+
             if rx_data.len() > 2 && rx_data[2] == scs_id {
                 all_data.extend_from_slice(&rx_data);
             } else {
                 return (COMM::RxCorrupt, vec![]);
             }
         }
-        
+
         (COMM::Success, all_data)
     }
 
-    // 添加寄存器写入功能
     pub fn reg_write_1byte(&mut self, scs_id: u32, address: u32, data: u8) -> COMM {
         let mut tx_packet = vec![0u32; 8];
         tx_packet[ID] = scs_id;
@@ -408,7 +474,7 @@ impl ProtocolPacketHandler {
         tx_packet[INSTRUCTION] = INST::RegWrite as u32;
         tx_packet[PARAMETER0] = address;
         tx_packet[PARAMETER0 + 1] = data as u32;
-        
+
         self.tx_packet(&mut tx_packet)
     }
 
@@ -420,32 +486,50 @@ impl ProtocolPacketHandler {
         tx_packet[PARAMETER0] = address;
         tx_packet[PARAMETER0 + 1] = self.scs_lobyte(data as i32) as u32;
         tx_packet[PARAMETER0 + 2] = self.scs_hibyte(data as i32) as u32;
-        
+
         self.tx_packet(&mut tx_packet)
     }
 
-    // 添加批量读取功能
+    pub fn reg_write_tx_rx(
+        &mut self,
+        scs_id: u32,
+        address: u32,
+        length: u32,
+        data: &[u32],
+    ) -> (COMM, u8) {
+        let mut tx_packet = vec![0u32; (length + 7) as usize];
+        tx_packet[ID] = scs_id;
+        tx_packet[LENGTH] = length + 3;
+        tx_packet[INSTRUCTION] = INST::RegWrite as u32;
+        tx_packet[PARAMETER0] = address;
+
+        for i in 0..length as usize {
+            tx_packet[PARAMETER0 + 1 + i] = data[i];
+        }
+
+        let (_, result, error) = self.tx_rx_packet(&mut tx_packet);
+        (result, error)
+    }
+
     pub fn bulk_read_tx(&mut self, param: Vec<u32>) -> COMM {
         let param_length = param.len() as u32;
         let mut tx_packet = vec![0u32; param_length as usize + 6];
-        
+
         tx_packet[ID] = BROADCAST_ID as u32;
         tx_packet[LENGTH] = param_length + 2;
         tx_packet[INSTRUCTION] = INST::SyncRead as u32;
-        
+
         for (i, &value) in param.iter().enumerate() {
             tx_packet[PARAMETER0 + i] = value;
         }
-        
+
         self.tx_packet(&mut tx_packet)
     }
 
-    // 获取端口处理器的可变引用
     pub fn get_port_handler_mut(&mut self) -> &mut PortHandler {
         &mut self.port_handler
     }
 
-    // 获取端口处理器的不可变引用
     pub fn get_port_handler(&self) -> &PortHandler {
         &self.port_handler
     }
