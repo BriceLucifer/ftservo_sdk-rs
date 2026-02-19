@@ -147,7 +147,7 @@ impl ProtocolPacketHandler {
         }
     }
 
-    pub fn tx_packet(&mut self, tx_packet: &mut Vec<u32>) -> COMM {
+    pub fn tx_packet(&mut self, tx_packet: &mut [u32]) -> COMM {
         let mut checksum = 0;
         let total_packet_length = tx_packet[LENGTH] + 4;
 
@@ -164,8 +164,12 @@ impl ProtocolPacketHandler {
         tx_packet[HEADER0] = 0xff;
         tx_packet[HEADER1] = 0xff;
 
-        for idx in 2..(total_packet_length - 1) as usize {
-            checksum += tx_packet[idx];
+        for &byte in tx_packet
+            .iter()
+            .take((total_packet_length - 1) as usize)
+            .skip(2)
+        {
+            checksum += byte;
         }
         tx_packet[total_packet_length as usize - 1] = !checksum & 0xff;
 
@@ -250,8 +254,8 @@ impl ProtocolPacketHandler {
                     }
 
                     checksum = 0;
-                    for i in 2..wait_length - 1 {
-                        checksum += rx_packet[i];
+                    for &byte in rx_packet.iter().take(wait_length - 1).skip(2) {
+                        checksum += byte;
                     }
                     checksum = (!checksum) & 0xFF;
 
@@ -265,15 +269,13 @@ impl ProtocolPacketHandler {
                     rx_packet.drain(0..idx);
                     rx_length -= idx;
                 }
-            } else {
-                if self.port_handler.is_packet_timeout() {
-                    result = if rx_length == 0 {
-                        COMM::RxTimeout
-                    } else {
-                        COMM::RxCorrupt
-                    };
-                    break;
-                }
+            } else if self.port_handler.is_packet_timeout() {
+                result = if rx_length == 0 {
+                    COMM::RxTimeout
+                } else {
+                    COMM::RxCorrupt
+                };
+                break;
             }
         }
 
@@ -286,7 +288,7 @@ impl ProtocolPacketHandler {
         }
     }
 
-    pub fn tx_rx_packet(&mut self, tx_packet: &mut Vec<u32>) -> (Vec<u32>, COMM, u8) {
+    pub fn tx_rx_packet(&mut self, tx_packet: &mut [u32]) -> (Vec<u32>, COMM, u8) {
         let tx_result = self.tx_packet(tx_packet);
         if tx_result != COMM::Success {
             return (vec![], tx_result, 0);
