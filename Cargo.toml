@@ -1,6 +1,6 @@
 [package]
 name = "ftservo_sdk"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 authors = ["BriceLucifer <2376671337@qq.com>"]
 description = "A Rust library for controlling FTServo devices"
@@ -15,7 +15,7 @@ lto = "fat"
 codegen-units = 1
 
 [dependencies]
-serialport = "4.7.1"
+serialport = "4.9.0"
 thiserror = "1.0"
 
 # 示例程序

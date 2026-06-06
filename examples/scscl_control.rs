@@ -98,10 +98,10 @@ fn main() -> Result<()> {
 
     // 5. 同步控制多个SCSCL舵机
     println!("\n--- SCSCL同步控制 ---");
-    let servo_ids = vec![1, 2, 3];
-    let positions = vec![1024, 2048, 3072];
-    let times = vec![1000, 1000, 1000];
-    let speeds = vec![2400, 2400, 2400];
+    let servo_ids = [1, 2, 3];
+    let positions = [1024, 2048, 3072];
+    let times = [1000, 1000, 1000];
+    let speeds = [2400, 2400, 2400];
 
     scscl.group_sync_write.clear_param();
     for i in 0..servo_ids.len() {

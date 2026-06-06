@@ -1,6 +1,6 @@
 use crate::{
     port_handler::PortHandler,
-    scservo_def::{ErrorCode, BROADCAST_ID, COMM, INST},
+    scservo_def::{ErrorCode, BROADCAST_ID, COMM, INST, MAX_ID},
 };
 use std::io::ErrorKind;
 
@@ -157,6 +157,15 @@ impl ProtocolPacketHandler {
 
         self.port_handler.is_using = true;
         if total_packet_length as usize > TXPACKET_MAX_LEN {
+            self.port_handler.is_using = false;
+            return COMM::TxError;
+        }
+
+        if tx_packet
+            .iter()
+            .take(total_packet_length as usize)
+            .any(|&byte| byte > 0xFF)
+        {
             self.port_handler.is_using = false;
             return COMM::TxError;
         }
@@ -356,13 +365,23 @@ impl ProtocolPacketHandler {
         (result, error)
     }
 
-    pub fn ping(&mut self, scs_id: u32) -> COMM {
+    pub fn ping(&mut self, scs_id: u32) -> (u16, COMM, u8) {
+        if scs_id > MAX_ID as u32 {
+            return (0, COMM::NotAvailable, 0);
+        }
+
         let mut tx_packet = vec![0u32; 6];
         tx_packet[ID] = scs_id;
         tx_packet[LENGTH] = 2;
         tx_packet[INSTRUCTION] = INST::Ping as u32;
 
-        self.tx_packet(&mut tx_packet)
+        let (_, result, error) = self.tx_rx_packet(&mut tx_packet);
+        if result != COMM::Success {
+            return (0, result, error);
+        }
+
+        let (model_number, result, error) = self.read_2byte_value(scs_id, 3);
+        (model_number, result, error)
     }
 
     pub fn action(&mut self, scs_id: u32) -> COMM {
@@ -371,7 +390,33 @@ impl ProtocolPacketHandler {
         tx_packet[LENGTH] = 2;
         tx_packet[INSTRUCTION] = INST::Action as u32;
 
-        self.tx_packet(&mut tx_packet)
+        let (_, result, _) = self.tx_rx_packet(&mut tx_packet);
+        result
+    }
+
+    pub fn read_tx_rx(&mut self, scs_id: u32, address: u32, length: u32) -> (Vec<u32>, COMM, u8) {
+        if scs_id > MAX_ID as u32 {
+            return (vec![], COMM::NotAvailable, 0);
+        }
+
+        let mut tx_packet = vec![0u32; 8];
+        tx_packet[ID] = scs_id;
+        tx_packet[LENGTH] = 4;
+        tx_packet[INSTRUCTION] = INST::Read as u32;
+        tx_packet[PARAMETER0] = address;
+        tx_packet[PARAMETER0 + 1] = length;
+
+        let (rx_packet, result, error) = self.tx_rx_packet(&mut tx_packet);
+        if result != COMM::Success {
+            return (vec![], result, error);
+        }
+
+        let data_end = PARAMETER0 + length as usize;
+        if rx_packet.len() < data_end {
+            return (vec![], COMM::RxCorrupt, error);
+        }
+
+        (rx_packet[PARAMETER0..data_end].to_vec(), result, error)
     }
 
     pub fn read_1byte_tx_rx(&mut self, scs_id: u32, address: u32) -> (Vec<u32>, COMM) {
@@ -386,6 +431,16 @@ impl ProtocolPacketHandler {
         (data, result)
     }
 
+    pub fn read_1byte_value(&mut self, scs_id: u32, address: u32) -> (u8, COMM, u8) {
+        let (data, result, error) = self.read_tx_rx(scs_id, address, 1);
+        let value = if result == COMM::Success && !data.is_empty() {
+            data[0] as u8
+        } else {
+            0
+        };
+        (value, result, error)
+    }
+
     pub fn read_2byte_tx_rx(&mut self, scs_id: u32, address: u32) -> (Vec<u32>, COMM) {
         let mut tx_packet = vec![0u32; 8];
         tx_packet[ID] = scs_id;
@@ -396,6 +451,28 @@ impl ProtocolPacketHandler {
 
         let (data, result, _) = self.tx_rx_packet(&mut tx_packet);
         (data, result)
+    }
+
+    pub fn read_2byte_value(&mut self, scs_id: u32, address: u32) -> (u16, COMM, u8) {
+        let (data, result, error) = self.read_tx_rx(scs_id, address, 2);
+        let value = if result == COMM::Success && data.len() >= 2 {
+            self.scs_makeword(data[0] as i32, data[1] as i32) as u16
+        } else {
+            0
+        };
+        (value, result, error)
+    }
+
+    pub fn read_4byte_value(&mut self, scs_id: u32, address: u32) -> (u32, COMM, u8) {
+        let (data, result, error) = self.read_tx_rx(scs_id, address, 4);
+        let value = if result == COMM::Success && data.len() >= 4 {
+            let low = self.scs_makeword(data[0] as i32, data[1] as i32);
+            let high = self.scs_makeword(data[2] as i32, data[3] as i32);
+            self.scs_makedword(low, high) as u32
+        } else {
+            0
+        };
+        (value, result, error)
     }
 
     pub fn write_1byte_tx_rx(&mut self, scs_id: u32, address: u32, data: u8) -> (COMM, u8) {
@@ -534,5 +611,46 @@ impl ProtocolPacketHandler {
 
     pub fn get_port_handler(&self) -> &PortHandler {
         &self.port_handler
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn packet_handler() -> ProtocolPacketHandler {
+        let port = PortHandler::new("/dev/null");
+        ProtocolPacketHandler::new(port, Endian::SmallEndian)
+    }
+
+    #[test]
+    fn ping_rejects_broadcast_and_out_of_range_ids_without_serial_io() {
+        let mut ph = packet_handler();
+
+        assert_eq!(ph.ping(BROADCAST_ID as u32), (0, COMM::NotAvailable, 0));
+        assert_eq!(ph.ping(MAX_ID as u32 + 1), (0, COMM::NotAvailable, 0));
+    }
+
+    #[test]
+    fn read_tx_rx_rejects_invalid_ids_without_serial_io() {
+        let mut ph = packet_handler();
+
+        assert_eq!(
+            ph.read_tx_rx(BROADCAST_ID as u32, 56, 2),
+            (vec![], COMM::NotAvailable, 0)
+        );
+        assert_eq!(
+            ph.read_tx_rx(MAX_ID as u32 + 1, 56, 2),
+            (vec![], COMM::NotAvailable, 0)
+        );
+    }
+
+    #[test]
+    fn tx_packet_rejects_non_byte_payload_and_releases_port() {
+        let mut ph = packet_handler();
+        let mut tx_packet = vec![0, 0, 1, 4, INST::Write as u32, 42, 0x100, 0];
+
+        assert_eq!(ph.tx_packet(&mut tx_packet), COMM::TxError);
+        assert!(!ph.port_handler.is_using);
     }
 }

@@ -56,4 +56,30 @@ mod tests {
         gsr.add_param(3).unwrap();
         gsr.make_param();
     }
+
+    #[test]
+    fn test_read_rx_extracts_error_and_data_once() {
+        let port = PortHandler::new("/dev/null");
+        let ph = ProtocolPacketHandler::new(port, Endian::SmallEndian);
+        let gsr = GroupSyncRead::new(ph, 56, 2);
+
+        let rxpacket = vec![0xFF, 0xFF, 1, 4, 0, 0x34, 0x12, 0xB4];
+        let (data, result) = gsr.read_rx(&rxpacket, 1, 2);
+
+        assert_eq!(result, ftservo_sdk::COMM::Success);
+        assert_eq!(data, vec![0, 0x34, 0x12]);
+    }
+
+    #[test]
+    fn test_read_rx_rejects_bad_checksum() {
+        let port = PortHandler::new("/dev/null");
+        let ph = ProtocolPacketHandler::new(port, Endian::SmallEndian);
+        let gsr = GroupSyncRead::new(ph, 56, 2);
+
+        let rxpacket = vec![0xFF, 0xFF, 1, 4, 0, 0x34, 0x12, 0x00];
+        let (data, result) = gsr.read_rx(&rxpacket, 1, 2);
+
+        assert_eq!(result, ftservo_sdk::COMM::RxCorrupt);
+        assert!(data.is_empty());
+    }
 }

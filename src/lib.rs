@@ -46,3 +46,16 @@ pub fn create_sms_sts(port_handler: PortHandler) -> SmsSts {
 pub fn create_scscl(port_handler: PortHandler) -> Scscl {
     Scscl::new(port_handler)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_port_handler_preserves_port_name() {
+        let port_handler = create_port_handler("/dev/ttyUSB0");
+
+        assert_eq!(port_handler.get_port_name(), "/dev/ttyUSB0");
+        assert_eq!(port_handler.get_baudrate(), 1_000_000);
+    }
+}

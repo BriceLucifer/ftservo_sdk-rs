@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     io::{Error, ErrorKind},
 };
 
@@ -12,7 +12,7 @@ pub struct GroupSyncWrite {
 
     is_param_changed: bool,
     param: Vec<u32>,
-    data_dict: HashMap<u32, Vec<u32>>,
+    data_dict: BTreeMap<u32, Vec<u32>>,
 }
 
 impl GroupSyncWrite {
@@ -22,7 +22,7 @@ impl GroupSyncWrite {
             data_length,
             is_param_changed: false,
             param: Vec::new(),
-            data_dict: HashMap::new(),
+            data_dict: BTreeMap::new(),
         }
     }
 
@@ -40,6 +40,8 @@ impl GroupSyncWrite {
 
             self.param.push(scs_id);
             self.param.extend(data.iter());
+            self.param
+                .resize(self.param.len() + self.data_length as usize - data.len(), 0);
         }
     }
 
@@ -116,5 +118,37 @@ impl GroupSyncWrite {
             self.param.clone(),
             (self.data_dict.len() * (1 + self.data_length as usize)) as u32,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn make_param_orders_ids_and_pads_short_data() {
+        let mut group = GroupSyncWrite::new(42, 3);
+
+        group.add_param(3, vec![30, 31]).unwrap();
+        group.add_param(1, vec![10, 11, 12]).unwrap();
+        group.add_param(2, vec![20]).unwrap();
+
+        group.make_param();
+
+        assert_eq!(group.param, vec![1, 10, 11, 12, 2, 20, 0, 0, 3, 30, 31, 0]);
+    }
+
+    #[test]
+    fn clear_param_resets_cached_payload() {
+        let mut group = GroupSyncWrite::new(42, 2);
+
+        group.add_param(1, vec![10, 11]).unwrap();
+        group.make_param();
+        assert!(!group.param.is_empty());
+
+        group.clear_param();
+
+        assert!(group.param.is_empty());
+        assert!(group.data_dict.is_empty());
     }
 }

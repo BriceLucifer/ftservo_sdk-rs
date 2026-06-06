@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     let mut sms_sts = create_sms_sts(port_handler);
 
     // 定义要控制的舵机
-    let servo_ids = vec![1, 2, 3];
+    let servo_ids = [1, 2, 3];
 
     // 1. 测试所有舵机连接
     println!("\n--- 测试舵机连接 ---");
@@ -47,9 +47,9 @@ fn main() -> Result<()> {
     // 3. 同步位置控制 - 动作1
     // 对应Python: 逐个添加参数然后发送
     println!("\n--- 同步控制 - 动作1 ---");
-    let positions1 = vec![1024, 2048, 3072]; // 不同位置
-    let speeds1 = vec![2400, 2400, 2400]; // 相同速度
-    let accs1 = vec![0, 0, 0];
+    let positions1 = [1024, 2048, 3072]; // 不同位置
+    let speeds1 = [2400, 2400, 2400]; // 相同速度
+    let accs1 = [0, 0, 0];
 
     println!("执行动作1: 舵机移动到不同位置");
 
@@ -81,9 +81,9 @@ fn main() -> Result<()> {
 
     // 4. 同步位置控制 - 动作2
     println!("\n--- 同步控制 - 动作2 ---");
-    let positions2 = vec![3072, 1024, 2048]; // 交换位置
-    let speeds2 = vec![1800, 1800, 1800]; // 较慢速度
-    let accs2 = vec![0, 0, 0];
+    let positions2 = [3072, 1024, 2048]; // 交换位置
+    let speeds2 = [1800, 1800, 1800]; // 较慢速度
+    let accs2 = [0, 0, 0];
 
     println!("执行动作2: 舵机交换位置");
 
@@ -105,9 +105,9 @@ fn main() -> Result<()> {
 
     // 5. 回到初始位置
     println!("\n--- 回到初始位置 ---");
-    let home_positions = vec![2048, 2048, 2048]; // 中间位置
-    let home_speeds = vec![1200, 1200, 1200]; // 慢速
-    let home_accs = vec![0, 0, 0];
+    let home_positions = [2048, 2048, 2048]; // 中间位置
+    let home_speeds = [1200, 1200, 1200]; // 慢速
+    let home_accs = [0, 0, 0];
 
     sms_sts.group_sync_write.clear_param();
     for i in 0..servo_ids.len() {

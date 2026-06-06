@@ -97,55 +97,43 @@ impl SmsSts {
     }
 
     pub fn read_pos(&mut self, scs_id: u32) -> Result<i32, COMM> {
-        let (data, result) = self
+        let (pos, result, _) = self
             .ph
-            .read_2byte_tx_rx(scs_id, SMS_STS_PRESENT_POSITION_L as u32);
+            .read_2byte_value(scs_id, SMS_STS_PRESENT_POSITION_L as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 7 {
-                    let pos = self.ph.scs_makeword(data[5] as i32, data[6] as i32);
-                    Ok(self.ph.scs_tohost(pos, 15))
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(self.ph.scs_tohost(pos as i32, 15)),
             _ => Err(result),
         }
     }
 
     pub fn read_speed(&mut self, scs_id: u32) -> Result<i32, COMM> {
-        let (data, result) = self
+        let (speed, result, _) = self
             .ph
-            .read_2byte_tx_rx(scs_id, SMS_STS_PRESENT_SPEED_L as u32);
+            .read_2byte_value(scs_id, SMS_STS_PRESENT_SPEED_L as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 7 {
-                    let speed = self.ph.scs_makeword(data[5] as i32, data[6] as i32);
-                    Ok(self.ph.scs_tohost(speed, 15))
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(self.ph.scs_tohost(speed as i32, 15)),
             _ => Err(result),
         }
     }
 
     pub fn read_pos_speed(&mut self, scs_id: u32) -> Result<(i32, i32), COMM> {
-        let pos = self.read_pos(scs_id)?;
-        let speed = self.read_speed(scs_id)?;
-        Ok((pos, speed))
+        let (pos_speed, result, _) = self
+            .ph
+            .read_4byte_value(scs_id, SMS_STS_PRESENT_POSITION_L as u32);
+        match result {
+            COMM::Success => {
+                let pos = self.ph.scs_loword(pos_speed as i32);
+                let speed = self.ph.scs_hiword(pos_speed as i32);
+                Ok((self.ph.scs_tohost(pos, 15), self.ph.scs_tohost(speed, 15)))
+            }
+            _ => Err(result),
+        }
     }
 
     pub fn read_moving(&mut self, scs_id: u32) -> Result<bool, COMM> {
-        let (data, result) = self.ph.read_1byte_tx_rx(scs_id, SMS_STS_MOVING as u32);
+        let (moving, result, _) = self.ph.read_1byte_value(scs_id, SMS_STS_MOVING as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 6 {
-                    Ok(data[5] != 0)
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(moving != 0),
             _ => Err(result),
         }
     }
@@ -232,71 +220,62 @@ impl SmsSts {
     }
 
     pub fn ping(&mut self, scs_id: u32) -> COMM {
-        self.ph.ping(scs_id)
+        let (_, result, _) = self.ph.ping(scs_id);
+        result
+    }
+
+    pub fn ping_model(&mut self, scs_id: u32) -> Result<u16, COMM> {
+        let (model, result, _) = self.ph.ping(scs_id);
+        match result {
+            COMM::Success => Ok(model),
+            _ => Err(result),
+        }
     }
 
     pub fn read_voltage(&mut self, scs_id: u32) -> Result<u8, COMM> {
-        let (data, result) = self
+        let (voltage, result, _) = self
             .ph
-            .read_1byte_tx_rx(scs_id, SMS_STS_PRESENT_VOLTAGE as u32);
+            .read_1byte_value(scs_id, SMS_STS_PRESENT_VOLTAGE as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 6 {
-                    Ok(data[5] as u8)
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(voltage),
             _ => Err(result),
         }
     }
 
     pub fn read_temperature(&mut self, scs_id: u32) -> Result<u8, COMM> {
-        let (data, result) = self
+        let (temperature, result, _) = self
             .ph
-            .read_1byte_tx_rx(scs_id, SMS_STS_PRESENT_TEMPERATURE as u32);
+            .read_1byte_value(scs_id, SMS_STS_PRESENT_TEMPERATURE as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 6 {
-                    Ok(data[5] as u8)
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(temperature),
             _ => Err(result),
         }
     }
 
     pub fn read_load(&mut self, scs_id: u32) -> Result<i32, COMM> {
-        let (data, result) = self
+        let (load, result, _) = self
             .ph
-            .read_2byte_tx_rx(scs_id, SMS_STS_PRESENT_LOAD_L as u32);
+            .read_2byte_value(scs_id, SMS_STS_PRESENT_LOAD_L as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 7 {
-                    let load = self.ph.scs_makeword(data[5] as i32, data[6] as i32);
-                    Ok(self.ph.scs_tohost(load, 10))
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(self.ph.scs_tohost(load as i32, 10)),
             _ => Err(result),
         }
     }
 
     pub fn read_current(&mut self, scs_id: u32) -> Result<i32, COMM> {
-        let (data, result) = self
+        let (current, result, _) = self
             .ph
-            .read_2byte_tx_rx(scs_id, SMS_STS_PRESENT_CURRENT_L as u32);
+            .read_2byte_value(scs_id, SMS_STS_PRESENT_CURRENT_L as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 7 {
-                    let current = self.ph.scs_makeword(data[5] as i32, data[6] as i32);
-                    Ok(self.ph.scs_tohost(current, 15))
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(self.ph.scs_tohost(current as i32, 15)),
+            _ => Err(result),
+        }
+    }
+
+    pub fn read_model(&mut self, scs_id: u32) -> Result<u16, COMM> {
+        let (model, result, _) = self.ph.read_2byte_value(scs_id, SMS_STS_MODEL_L as u32);
+        match result {
+            COMM::Success => Ok(model),
             _ => Err(result),
         }
     }

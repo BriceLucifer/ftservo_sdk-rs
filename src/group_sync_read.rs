@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     io::{Error, ErrorKind},
 };
 
@@ -14,7 +14,7 @@ pub struct GroupSyncRead {
     last_result: bool,
     is_param_changed: bool,
     param: Vec<u32>,
-    data_dict: HashMap<u32, Vec<u32>>,
+    data_dict: BTreeMap<u32, Vec<u32>>,
 }
 
 impl GroupSyncRead {
@@ -26,7 +26,7 @@ impl GroupSyncRead {
             last_result: false,
             is_param_changed: false,
             param: Vec::new(),
-            data_dict: HashMap::new(),
+            data_dict: BTreeMap::new(),
         }
     }
 
@@ -44,7 +44,7 @@ impl GroupSyncRead {
             ))
         } else {
             self.data_dict
-                .insert(scs_id, vec![0; self.data_length as usize]);
+                .insert(scs_id, vec![0; self.data_length as usize + 1]);
             self.param.push(scs_id);
             self.is_param_changed = true;
             Ok(())
@@ -145,9 +145,10 @@ impl GroupSyncRead {
             let error = rxpacket[rx_index as usize];
             let mut cal_sum = scs_id + data_length + 2 + error;
             data.push(error);
-            data.extend_from_slice(&rxpacket[rx_index as usize..(rx_index + data_length) as usize]);
+            rx_index += 1;
             for _ in 0..data_length {
                 cal_sum += rxpacket[rx_index as usize];
+                data.push(rxpacket[rx_index as usize]);
                 rx_index += 1;
             }
             cal_sum = !cal_sum & 0xFF;
@@ -185,14 +186,75 @@ impl GroupSyncRead {
     }
 
     pub fn get_data(&self, scs_id: u32, address: u32, data_length: u32) -> Option<u32> {
+        if address < self.start_address {
+            return None;
+        }
+
         let index = (address - self.start_address + 1) as usize;
 
-        if data_length == 1 {
-            self.data_dict
-                .get(&scs_id)
-                .and_then(|data| data.get(index).copied())
-        } else {
-            None
+        let data = self.data_dict.get(&scs_id)?;
+        match data_length {
+            1 => data.get(index).copied(),
+            2 => Some(
+                self.ph
+                    .scs_makeword(*data.get(index)? as i32, *data.get(index + 1)? as i32)
+                    as u32,
+            ),
+            4 => {
+                let low = self
+                    .ph
+                    .scs_makeword(*data.get(index)? as i32, *data.get(index + 1)? as i32);
+                let high = self
+                    .ph
+                    .scs_makeword(*data.get(index + 2)? as i32, *data.get(index + 3)? as i32);
+                Some(self.ph.scs_makedword(low, high) as u32)
+            }
+            _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{port_handler::PortHandler, protocol_packet_handler::Endian};
+
+    fn group_sync_read(start_address: u32, data_length: u32) -> GroupSyncRead {
+        let port = PortHandler::new("/dev/null");
+        let ph = ProtocolPacketHandler::new(port, Endian::SmallEndian);
+        GroupSyncRead::new(ph, start_address, data_length)
+    }
+
+    #[test]
+    fn make_param_orders_ids() {
+        let mut group = group_sync_read(56, 2);
+
+        group.add_param(3).unwrap();
+        group.add_param(1).unwrap();
+        group.add_param(2).unwrap();
+        group.make_param();
+
+        assert_eq!(group.param, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn get_data_reads_one_two_and_four_byte_values() {
+        let mut group = group_sync_read(56, 4);
+        group.data_dict.insert(1, vec![0, 0x34, 0x12, 0x78, 0x56]);
+
+        assert_eq!(group.get_data(1, 56, 1), Some(0x34));
+        assert_eq!(group.get_data(1, 56, 2), Some(0x1234));
+        assert_eq!(group.get_data(1, 56, 4), Some(0x5678_1234));
+    }
+
+    #[test]
+    fn get_data_rejects_missing_or_out_of_range_values() {
+        let mut group = group_sync_read(56, 2);
+        group.data_dict.insert(1, vec![0, 0x34, 0x12]);
+
+        assert_eq!(group.get_data(2, 56, 1), None);
+        assert_eq!(group.get_data(1, 55, 1), None);
+        assert_eq!(group.get_data(1, 57, 2), None);
+        assert_eq!(group.get_data(1, 56, 3), None);
     }
 }

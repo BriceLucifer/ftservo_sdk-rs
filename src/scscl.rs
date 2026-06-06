@@ -42,7 +42,7 @@ pub const SCSCL_GOAL_TIME_L: u8 = 44;
 pub const SCSCL_GOAL_TIME_H: u8 = 45;
 pub const SCSCL_GOAL_SPEED_L: u8 = 46;
 pub const SCSCL_GOAL_SPEED_H: u8 = 47;
-pub const SCSCL_LOCK: u8 = 55;
+pub const SCSCL_LOCK: u8 = 48;
 
 // -------SRAM(只读)--------
 pub const SCSCL_PRESENT_POSITION_L: u8 = 56;
@@ -92,55 +92,43 @@ impl Scscl {
     }
 
     pub fn read_pos(&mut self, scs_id: u32) -> Result<i32, COMM> {
-        let (data, result) = self
+        let (pos, result, _) = self
             .ph
-            .read_2byte_tx_rx(scs_id, SCSCL_PRESENT_POSITION_L as u32);
+            .read_2byte_value(scs_id, SCSCL_PRESENT_POSITION_L as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 7 {
-                    let pos = self.ph.scs_makeword(data[5] as i32, data[6] as i32);
-                    Ok(pos)
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(pos as i32),
             _ => Err(result),
         }
     }
 
     pub fn read_speed(&mut self, scs_id: u32) -> Result<i32, COMM> {
-        let (data, result) = self
+        let (speed, result, _) = self
             .ph
-            .read_2byte_tx_rx(scs_id, SCSCL_PRESENT_SPEED_L as u32);
+            .read_2byte_value(scs_id, SCSCL_PRESENT_SPEED_L as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 7 {
-                    let speed = self.ph.scs_makeword(data[5] as i32, data[6] as i32);
-                    Ok(self.ph.scs_tohost(speed, 15))
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(self.ph.scs_tohost(speed as i32, 15)),
             _ => Err(result),
         }
     }
 
     pub fn read_pos_speed(&mut self, scs_id: u32) -> Result<(i32, i32), COMM> {
-        let pos = self.read_pos(scs_id)?;
-        let speed = self.read_speed(scs_id)?;
-        Ok((pos, speed))
+        let (pos_speed, result, _) = self
+            .ph
+            .read_4byte_value(scs_id, SCSCL_PRESENT_POSITION_L as u32);
+        match result {
+            COMM::Success => {
+                let pos = self.ph.scs_loword(pos_speed as i32);
+                let speed = self.ph.scs_hiword(pos_speed as i32);
+                Ok((pos, self.ph.scs_tohost(speed, 15)))
+            }
+            _ => Err(result),
+        }
     }
 
     pub fn read_moving(&mut self, scs_id: u32) -> Result<bool, COMM> {
-        let (data, result) = self.ph.read_1byte_tx_rx(scs_id, SCSCL_MOVING as u32);
+        let (moving, result, _) = self.ph.read_1byte_value(scs_id, SCSCL_MOVING as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 6 {
-                    Ok(data[5] != 0)
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(moving != 0),
             _ => Err(result),
         }
     }
@@ -260,69 +248,52 @@ impl Scscl {
     }
 
     pub fn read_model(&mut self, scs_id: u32) -> Result<u16, COMM> {
-        let (data, result) = self.ph.read_2byte_tx_rx(scs_id, SCSCL_MODEL_L as u32);
+        let (model, result, _) = self.ph.read_2byte_value(scs_id, SCSCL_MODEL_L as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 7 {
-                    let model = self.ph.scs_makeword(data[5] as i32, data[6] as i32) as u16;
-                    Ok(model)
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(model),
             _ => Err(result),
         }
     }
 
     pub fn ping(&mut self, scs_id: u32) -> COMM {
-        self.ph.ping(scs_id)
+        let (_, result, _) = self.ph.ping(scs_id);
+        result
+    }
+
+    pub fn ping_model(&mut self, scs_id: u32) -> Result<u16, COMM> {
+        let (model, result, _) = self.ph.ping(scs_id);
+        match result {
+            COMM::Success => Ok(model),
+            _ => Err(result),
+        }
     }
 
     pub fn read_load(&mut self, scs_id: u32) -> Result<i32, COMM> {
-        let (data, result) = self
+        let (load, result, _) = self
             .ph
-            .read_2byte_tx_rx(scs_id, SCSCL_PRESENT_LOAD_L as u32);
+            .read_2byte_value(scs_id, SCSCL_PRESENT_LOAD_L as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 7 {
-                    let load = self.ph.scs_makeword(data[5] as i32, data[6] as i32);
-                    Ok(self.ph.scs_tohost(load, 10))
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(self.ph.scs_tohost(load as i32, 10)),
             _ => Err(result),
         }
     }
 
     pub fn read_voltage(&mut self, scs_id: u32) -> Result<u8, COMM> {
-        let (data, result) = self
+        let (voltage, result, _) = self
             .ph
-            .read_1byte_tx_rx(scs_id, SCSCL_PRESENT_VOLTAGE as u32);
+            .read_1byte_value(scs_id, SCSCL_PRESENT_VOLTAGE as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 6 {
-                    Ok(data[5] as u8)
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(voltage),
             _ => Err(result),
         }
     }
 
     pub fn read_temperature(&mut self, scs_id: u32) -> Result<u8, COMM> {
-        let (data, result) = self
+        let (temperature, result, _) = self
             .ph
-            .read_1byte_tx_rx(scs_id, SCSCL_PRESENT_TEMPERATURE as u32);
+            .read_1byte_value(scs_id, SCSCL_PRESENT_TEMPERATURE as u32);
         match result {
-            COMM::Success => {
-                if data.len() >= 6 {
-                    Ok(data[5] as u8)
-                } else {
-                    Err(COMM::RxCorrupt)
-                }
-            }
+            COMM::Success => Ok(temperature),
             _ => Err(result),
         }
     }
